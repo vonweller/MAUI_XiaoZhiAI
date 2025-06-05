@@ -70,6 +70,9 @@
     <!-- Additional packages for enhanced functionality -->
     <PackageReference Include="CommunityToolkit.Maui" Version="7.0.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    
+    <!-- MAUI Audio plugin -->
+    <PackageReference Include="Plugin.Maui.Audio" Version="2.1.0" />
   </ItemGroup>
 
   <ItemGroup>

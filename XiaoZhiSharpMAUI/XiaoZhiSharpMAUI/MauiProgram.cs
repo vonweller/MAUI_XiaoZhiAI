@@ -3,6 +3,7 @@ using XiaoZhiSharpMAUI.Services;
 using XiaoZhiSharpMAUI.Shared.Services;
 using XiaoZhiSharp;
 using CommunityToolkit.Maui;
+using Plugin.Maui.Audio;
 
 namespace XiaoZhiSharpMAUI
 {
@@ -22,6 +23,10 @@ namespace XiaoZhiSharpMAUI
 
             // Add device-specific services used by the XiaoZhiSharpMAUI.Shared project
             builder.Services.AddSingleton<IFormFactor, FormFactor>();
+
+            // Add MAUI Audio service - 使用正确的配置方式
+            builder.Services.AddSingleton(AudioManager.Current);
+            builder.Services.AddSingleton<IMauiAudioService, MauiAudioService>();
 
             // Add XiaoZhiSharp services
             builder.Services.AddSingleton<XiaoZhiAgent>(serviceProvider =>

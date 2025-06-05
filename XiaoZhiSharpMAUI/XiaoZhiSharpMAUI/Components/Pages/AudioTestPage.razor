@@ -1,0 +1,244 @@
+@page "/audio-test"
+@using XiaoZhiSharpMAUI.Services
+@using Microsoft.Maui.ApplicationModel
+@inject IMauiAudioService AudioService
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<div class="container-fluid p-3">
+    <h3>🎵 MAUI音频服务测试</h3>
+    
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>🎙️ 录音功能</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-2 mb-3">
+                        <button class="btn btn-success" 
+                                @onclick="StartRecording" 
+                                disabled="@(AudioService.IsRecording)">
+                            🎙️ 开始录音
+                        </button>
+                        <button class="btn btn-danger" 
+                                @onclick="StopRecording" 
+                                disabled="@(!AudioService.IsRecording)">
+                            ⏹️ 停止录音
+                        </button>
+                    </div>
+                    
+                    <div class="alert @(AudioService.IsRecording ? "alert-success" : "alert-secondary")">
+                        状态: @(AudioService.IsRecording ? "正在录音..." : "未录音")
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(recordingMessage))
+                    {
+                        <div class="alert alert-info">
+                            @recordingMessage
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>🔊 播放功能</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-2 mb-3">
+                        <button class="btn btn-primary" 
+                                @onclick="PlayTestSound" 
+                                disabled="@(AudioService.IsPlaying)">
+                            🔊 播放测试音频
+                        </button>
+                        <button class="btn btn-warning" 
+                                @onclick="StopPlaying" 
+                                disabled="@(!AudioService.IsPlaying)">
+                            ⏸️ 停止播放
+                        </button>
+                    </div>
+                    
+                    <div class="alert @(AudioService.IsPlaying ? "alert-primary" : "alert-secondary")">
+                        状态: @(AudioService.IsPlaying ? "正在播放..." : "未播放")
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">音量控制</label>
+                        <input type="range" 
+                               class="form-range" 
+                               min="0" 
+                               max="100" 
+                               @bind="volume" 
+                               @oninput="OnVolumeChanged" />
+                        <small class="text-muted">当前音量: @volume%</small>
+                    </div>
+                    
+                    @if (!string.IsNullOrEmpty(playbackMessage))
+                    {
+                        <div class="alert alert-info">
+                            @playbackMessage
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>📊 音频数据统计</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>录音数据包数量:</strong> @recordedPacketCount</p>
+                    <p><strong>总录音时长:</strong> @totalRecordingTime 秒</p>
+                    <p><strong>最后更新:</strong> @lastUpdateTime</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string recordingMessage = "";
+    private string playbackMessage = "";
+    private int volume = 50;
+    private int recordedPacketCount = 0;
+    private double totalRecordingTime = 0;
+    private string lastUpdateTime = "";
+    private DateTime recordingStartTime;
+
+    protected override void OnInitialized()
+    {
+        // 订阅录音数据事件
+        AudioService.RecordDataAvailable += OnRecordDataAvailable;
+        base.OnInitialized();
+    }
+
+    private async Task StartRecording()
+    {
+        try
+        {
+            recordingMessage = "正在启动录音...";
+            StateHasChanged();
+            
+            recordingStartTime = DateTime.Now;
+            recordedPacketCount = 0;
+            
+            await AudioService.StartRecordingAsync();
+            recordingMessage = "录音已开始！";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            recordingMessage = $"录音启动失败: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopRecording()
+    {
+        try
+        {
+            await AudioService.StopRecordingAsync();
+            totalRecordingTime = (DateTime.Now - recordingStartTime).TotalSeconds;
+            recordingMessage = $"录音已停止，共录制 {totalRecordingTime:F1} 秒";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            recordingMessage = $"停止录音失败: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task PlayTestSound()
+    {
+        try
+        {
+            playbackMessage = "正在准备播放测试音频...";
+            StateHasChanged();
+
+            // 生成一个简单的测试音频 (正弦波)
+            var testAudio = GenerateTestAudio();
+            
+            await AudioService.PlayAudioAsync(testAudio);
+            playbackMessage = "测试音频播放中...";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            playbackMessage = $"播放失败: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task StopPlaying()
+    {
+        try
+        {
+            await AudioService.StopPlayingAsync();
+            playbackMessage = "播放已停止";
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            playbackMessage = $"停止播放失败: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private void OnVolumeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int newVolume))
+        {
+            volume = newVolume;
+            AudioService.SetVolume(volume / 100.0);
+        }
+    }
+
+    private void OnRecordDataAvailable(object? sender, byte[] audioData)
+    {
+        recordedPacketCount++;
+        lastUpdateTime = DateTime.Now.ToString("HH:mm:ss.fff");
+        
+        // 在UI线程中更新状态
+        InvokeAsync(() => StateHasChanged());
+    }
+
+    private byte[] GenerateTestAudio()
+    {
+        // 生成1秒的440Hz正弦波 (A音符)
+        const int sampleRate = 44100;
+        const int duration = 1; // 秒
+        const double frequency = 440.0; // Hz
+        
+        var samples = new short[sampleRate * duration];
+        for (int i = 0; i < samples.Length; i++)
+        {
+            double time = i / (double)sampleRate;
+            double amplitude = Math.Sin(2 * Math.PI * frequency * time);
+            samples[i] = (short)(amplitude * short.MaxValue * 0.3); // 30%音量避免过响
+        }
+        
+        // 转换为字节数组
+        var bytes = new byte[samples.Length * 2];
+        for (int i = 0; i < samples.Length; i++)
+        {
+            var sampleBytes = BitConverter.GetBytes(samples[i]);
+            bytes[i * 2] = sampleBytes[0];
+            bytes[i * 2 + 1] = sampleBytes[1];
+        }
+        
+        return bytes;
+    }
+
+    public void Dispose()
+    {
+        AudioService.RecordDataAvailable -= OnRecordDataAvailable;
+    }
+} 
