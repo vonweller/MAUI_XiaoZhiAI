@@ -1,0 +1,266 @@
+# ==================================
+# .NET MAUI 项目 .gitignore 文件
+# ==================================
+
+# ==================================
+# Visual Studio / VSCode
+# ==================================
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# ==================================
+# .NET Core / .NET Framework
+# ==================================
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# StyleCop
+StyleCopReport.xml
+
+# Files built by Visual Studio
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.log
+*.tlog
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# ==================================
+# NuGet Packages
+# ==================================
+*.nupkg
+# NuGet Symbol Packages
+*.snupkg
+# The packages folder can be ignored because of Package Restore
+**/[Pp]ackages/*
+# except build/, which is used as an MSBuild target.
+!**/[Pp]ackages/build/
+# Uncomment if necessary however generally it will be regenerated when needed
+#!**/[Pp]ackages/repositories.config
+# NuGet v3's project.json files produces more ignorable files
+*.nuget.props
+*.nuget.targets
+
+# ==================================
+# Microsoft Azure Web App publish settings
+# ==================================
+PublishScripts/
+*.Publish.xml
+*.pubxml
+*.pubxml.user
+*.publishproj
+
+# Microsoft Azure Web App publish settings. Comment the next line if you want to
+# checkin your Azure Web App publish settings, but sensitive information contained
+# in these scripts will be encrypted
+PublishProfiles/
+
+# ==================================
+# MAUI 特定文件
+# ==================================
+# MAUI Generated Files
+**/Generated/
+**/Platforms/Android/bin/
+**/Platforms/Android/obj/
+**/Platforms/iOS/bin/
+**/Platforms/iOS/obj/
+**/Platforms/MacCatalyst/bin/
+**/Platforms/MacCatalyst/obj/
+**/Platforms/Windows/bin/
+**/Platforms/Windows/obj/
+**/Platforms/Tizen/bin/
+**/Platforms/Tizen/obj/
+
+# MAUI Hot Reload
+**/MauiProgram.Generated.cs
+
+# ==================================
+# Android 特定文件
+# ==================================
+*.keystore
+*.jks
+# Android Resource.Designer.cs files
+**/Platforms/Android/Resources/Resource.designer.cs
+
+# ==================================
+# iOS 特定文件
+# ==================================
+*.ipa
+*.app
+*.dSYM/
+*.mobileprovision
+*.p12
+*.cer
+
+# ==================================
+# macOS 特定文件
+# ==================================
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ==================================
+# Windows 特定文件
+# ==================================
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# ==================================
+# Entity Framework
+# ==================================
+*.edmx.diagram
+*.edmx.designer.cs
+
+# ==================================
+# 测试结果
+# ==================================
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.VisualState.xml
+TestResult.xml
+nunit-*.xml
+*.coverage
+*.coveragexml
+
+# ==================================
+# 代码分析工具
+# ==================================
+# NCrunch
+_NCrunch_*
+.*crunch*.local.xml
+nCrunchTemp_*
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# TeamCity
+_TeamCity*
+
+# DotCover
+*.dotCover
+
+# ==================================
+# 其他IDE和编辑器
+# ==================================
+# JetBrains Rider
+*.sln.iml
+.idea/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# ==================================
+# 系统和临时文件
+# ==================================
+*.tmp
+*.temp
+*.cache
+*.log
+*.bak
+*.swp
+*.swo
+*~
+
+# ==================================
+# 自定义配置文件（可能包含敏感信息）
+# ==================================
+appsettings.local.json
+appsettings.development.json
+appsettings.production.json
+*.config.user
+secrets.json
+
+# ==================================
+# 包管理器锁定文件（根据需要调整）
+# ==================================
+packages-lock.json
+
+# ==================================
+# 本地开发环境文件
+# ==================================
+.env
+.env.local
+.env.development
+.env.production
+
+# ==================================
+# 构建工具和脚本生成的文件
+# ==================================
+*.Generated.cs
+*.g.cs
+*.g.i.cs
+
+# ==================================
+# Workload restore information
+# ==================================
+.dotnet/
+
+# ==================================
+# 备份文件
+# ==================================
+*.orig
+*.bak
+*.backup 
