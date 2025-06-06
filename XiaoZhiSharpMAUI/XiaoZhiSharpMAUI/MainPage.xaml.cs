@@ -7,6 +7,7 @@ using Microsoft.Maui.Networking;
 using XiaoZhiSharpMAUI.Services;
 using OpusSharp.Core;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace XiaoZhiSharpMAUI
 {
@@ -26,12 +27,38 @@ namespace XiaoZhiSharpMAUI
         private DateTime _lastScrollTime = DateTime.MinValue;
         private readonly SemaphoreSlim _audioProcessingSemaphore = new SemaphoreSlim(1, 1);
         private int _audioProcessedCount = 0;
+        private OpusDecoder? _opusDecoder;
         
         // 🔧 音频缓冲机制 - 类似PC版本
         private readonly ConcurrentQueue<short[]> _audioBufferQueue = new ConcurrentQueue<short[]>();
         private readonly SemaphoreSlim _audioPlaybackSemaphore = new SemaphoreSlim(1, 1);
         private bool _isAudioPlaying = false;
         private CancellationTokenSource? _audioPlaybackCts;
+        
+        // 🔧 高级音频流管理
+        private readonly List<short> _continuousAudioBuffer = new List<short>();
+        private readonly object _audioBufferLock = new object();
+        private DateTime _lastAudioReceived = DateTime.MinValue;
+        private const int MIN_BUFFER_SIZE = 8; // 最少8个包才开始播放
+        private const int OPTIMAL_BUFFER_SIZE = 12; // 理想缓冲大小
+        private const int MAX_BATCH_DURATION_MS = 800; // 单次播放最长800ms
+
+        // 🔧 重新设计：完整语音段播放机制
+        private readonly List<short> _speechBuffer = new List<short>();
+        private readonly object _speechBufferLock = new object();
+        private DateTime _lastAudioPacketTime = DateTime.MinValue;
+        private bool _isSpeechActive = false;
+        private readonly SemaphoreSlim _speechPlaybackSemaphore = new SemaphoreSlim(1, 1);
+        private CancellationTokenSource? _speechTimeoutCts;
+        
+        // 语音检测参数
+        private const int SPEECH_TIMEOUT_MS = 400; // 设置一个安全的超时，之后再优化
+        private const int MIN_SPEECH_LENGTH_MS = 200; // 最短语音长度200ms
+        private const int MAX_SPEECH_LENGTH_MS = 10000; // 最长语音10秒
+
+        // 语音检测参数 - 流式播放优化
+        private const int STREAM_START_THRESHOLD_MS = 240; // 缓冲240ms后立即开始播放
+        private const int STREAM_END_TIMEOUT_MS = 400;     // 400ms无新数据则认为语音结束
 
         public MainPage(XiaoZhiAgent xiaoZhiAgent, ILogger<MainPage> logger, IMauiAudioService? mauiAudioService)
         {
@@ -131,12 +158,18 @@ namespace XiaoZhiSharpMAUI
                 
                 if (_androidWebSocket.State == WebSocketState.Open)
                 {
+                    // 🔧 关键修复：初始化共享的Opus解码器
+                    const int sampleRate = 24000;
+                    const int channels = 1;
+                    _opusDecoder = new OpusDecoder(sampleRate, channels);
+                    
                     MainThread.BeginInvokeOnMainThread(() =>
                     {
                         _isConnected = true;
                         UpdateStatus("Android WebSocket已连接");
                         UpdateConnectionStatus("WebSocket已连接");
                         AddSystemMessage("✅ Android WebSocket连接成功");
+                        AddSystemMessage("🎧 Opus解码器已初始化 (共享实例)");
                         AddSystemMessage("📝 您可以发送文字消息进行对话");
                         AddSystemMessage("🎤 录音功能使用MAUI音频服务");
                     });
@@ -1173,6 +1206,11 @@ namespace XiaoZhiSharpMAUI
                             }
                             _androidWebSocket.Dispose();
                             _androidWebSocket = null;
+                            
+                            // 关键：销毁旧的解码器
+                            _opusDecoder?.Dispose();
+                            _opusDecoder = null;
+                            
                             AddSystemMessage("🛑 Android WebSocket已断开");
                         }
                     }
@@ -1238,11 +1276,21 @@ namespace XiaoZhiSharpMAUI
                 _audioPlaybackCts?.Cancel();
                 _isAudioPlaying = false;
                 
+                // 🔧 清理连续音频缓冲区
+                lock (_audioBufferLock)
+                {
+                    _continuousAudioBuffer.Clear();
+                }
+                
                 if (IsAndroidPlatform)
                 {
                     // 清理Android WebSocket资源
                     _androidWebSocketCts?.Cancel();
                     _androidWebSocket?.Dispose();
+                    
+                    // 关键：销毁解码器
+                    _opusDecoder?.Dispose();
+                    _opusDecoder = null;
                 }
                 else
                 {
@@ -1259,7 +1307,7 @@ namespace XiaoZhiSharpMAUI
                 _audioProcessingSemaphore?.Dispose();
                 _audioPlaybackSemaphore?.Dispose();
                 
-                // 清理音频缓冲队列
+                // 清理旧的音频缓冲队列（如果还存在）
                 while (_audioBufferQueue.TryDequeue(out _)) { }
                 
             }
@@ -1273,183 +1321,109 @@ namespace XiaoZhiSharpMAUI
         {
             try
             {
-                if (_mauiAudioService == null)
+                if (_mauiAudioService == null) return;
+
+                // 关键修复：在一句话开始时，重置解码器
+                lock (_speechBufferLock)
                 {
-                    MainThread.BeginInvokeOnMainThread(() =>
+                    if (!_isSpeechActive)
                     {
-                        AddSystemMessage("❌ 音频服务未初始化");
-                    });
-                    return;
-                }
-                
-                // 🔧 音频缓冲机制：解码音频包并加入缓冲队列
-                var pcmData = DecodeOpusToShortArray(audioData);
-                if (pcmData != null && pcmData.Length > 0)
-                {
-                    // 将PCM数据加入缓冲队列
-                    _audioBufferQueue.Enqueue(pcmData);
-                    
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        AddSystemMessage($"🔊 音频包已缓存 (队列长度: {_audioBufferQueue.Count})");
-                    });
-                    
-                    // 🔧 类似PC版本：当缓冲队列中有足够的音频包时开始播放
-                    if (_audioBufferQueue.Count >= 3 && !_isAudioPlaying) // 降低到3个包就开始播放
-                    {
-                        MainThread.BeginInvokeOnMainThread(() =>
-                        {
-                            AddSystemMessage("🎵 开始缓冲播放");
-                        });
-                        
-                        // 启动音频播放任务
-                        _ = Task.Run(ProcessAudioBufferAsync);
+                        _opusDecoder?.Dispose();
+                        _opusDecoder = new OpusDecoder(24000, 1);
+                        MainThread.BeginInvokeOnMainThread(() => AddSystemMessage("🎤 新语音开始 (解码器已重置)..."));
+                        _isSpeechActive = true;
                     }
                 }
-                else
+
+                var pcmData = DecodeOpusToShortArray(audioData);
+                if (pcmData == null || pcmData.Length == 0) return;
+
+                // 收集音频包到语音缓冲区
+                lock (_speechBufferLock)
                 {
-                    MainThread.BeginInvokeOnMainThread(() =>
-                    {
-                        AddSystemMessage("⚠️ 音频解码失败，跳过此包");
-                    });
+                    _speechBuffer.AddRange(pcmData);
+                    _lastAudioPacketTime = DateTime.Now;
                 }
-                
+
+                // 启动或重置语音超时检测
+                _speechTimeoutCts?.Cancel();
+                _speechTimeoutCts = new CancellationTokenSource();
+                _ = Task.Run(() => MonitorSpeechTimeout(_speechTimeoutCts.Token));
             }
             catch (Exception ex)
             {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    AddSystemMessage($"❌ 音频处理异常: {ex.Message}");
-                });
                 _logger.LogError(ex, "Error in PlayAudioDataAsync");
             }
         }
-        
-        private async Task ProcessAudioBufferAsync()
+
+        private async Task MonitorSpeechTimeout(CancellationToken cancellationToken)
         {
-            // 使用信号量确保只有一个播放任务在运行
-            if (!await _audioPlaybackSemaphore.WaitAsync(100))
-            {
-                return; // 已有播放任务在运行
-            }
-            
             try
             {
-                _isAudioPlaying = true;
-                _audioPlaybackCts = new CancellationTokenSource();
-                
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    AddSystemMessage("🎵 开始音频缓冲播放任务");
-                });
-                
-                while (_audioBufferQueue.Count > 0 && !_audioPlaybackCts.Token.IsCancellationRequested)
-                {
-                    // 收集一批音频数据进行播放
-                    var batchPcmData = CollectAudioBatch();
-                    
-                    if (batchPcmData != null && batchPcmData.Length > 0)
-                    {
-                        MainThread.BeginInvokeOnMainThread(() =>
-                        {
-                            AddSystemMessage($"🎵 播放音频批次: {batchPcmData.Length}采样");
-                        });
-                        
-                        // 转换为WAV并播放
-                        var wavData = CreateWavFromPcm(batchPcmData, batchPcmData.Length, 24000, 1);
-                        
-                        try
-                        {
-                            await _mauiAudioService.PlayAudioAsync(wavData);
-                            
-                            MainThread.BeginInvokeOnMainThread(() =>
-                            {
-                                AddSystemMessage("✅ 批次播放完成");
-                                UpdateStatus("语音播放中...");
-                            });
-                            
-                            // 等待播放完成（估算播放时间）
-                            int durationMs = (batchPcmData.Length * 1000) / 24000; // 24kHz采样率
-                            await Task.Delay(Math.Max(durationMs, 100), _audioPlaybackCts.Token);
-                        }
-                        catch (Exception playEx)
-                        {
-                            MainThread.BeginInvokeOnMainThread(() =>
-                            {
-                                AddSystemMessage($"❌ 批次播放失败: {playEx.Message}");
-                            });
-                        }
-                    }
-                    
-                    // 短暂延迟避免CPU占用过高
-                    await Task.Delay(50, _audioPlaybackCts.Token);
-                }
-                
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    AddSystemMessage("🎵 音频缓冲播放任务结束");
-                    UpdateStatus("语音播放完成");
-                });
-                
+                await Task.Delay(SPEECH_TIMEOUT_MS, cancellationToken);
+                await PlayCompleteSpeechAsync();
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) { /* Normal cancellation */ }
+        }
+
+        private async Task PlayCompleteSpeechAsync()
+        {
+            if (!await _speechPlaybackSemaphore.WaitAsync(100)) return;
+
+            short[] speechData;
+            try
             {
+                lock (_speechBufferLock)
+                {
+                    if (_speechBuffer.Count == 0) return;
+                    speechData = _speechBuffer.ToArray();
+                    _speechBuffer.Clear();
+                    _isSpeechActive = false; // 允许下一句话重置解码器
+                }
+
+                double durationMs = speechData.Length / 24.0;
                 MainThread.BeginInvokeOnMainThread(() =>
                 {
-                    AddSystemMessage("🛑 音频播放被取消");
+                    AddSystemMessage($"🎵 开始播放完整语音: {durationMs:F0}ms");
+                    UpdateStatus("正在播放AI语音...");
+                });
+
+                var wavData = CreateWavFromPcm(speechData, speechData.Length, 24000, 1);
+                await _mauiAudioService.PlayAudioAsync(wavData);
+
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    AddSystemMessage($"✅ 语音播放完成");
+                    UpdateStatus("语音播放完成");
                 });
             }
             catch (Exception ex)
             {
-                MainThread.BeginInvokeOnMainThread(() =>
-                {
-                    AddSystemMessage($"❌ 音频播放任务异常: {ex.Message}");
-                });
-                _logger.LogError(ex, "Audio playback task error");
+                MainThread.BeginInvokeOnMainThread(() => AddSystemMessage($"❌ 完整语音播放失败: {ex.Message}"));
+                _logger.LogError(ex, "Error playing complete speech");
             }
             finally
             {
-                _isAudioPlaying = false;
-                _audioPlaybackSemaphore.Release();
+                _speechPlaybackSemaphore.Release();
             }
-        }
-        
-        private short[]? CollectAudioBatch()
-        {
-            // 收集多个音频包合并成一个批次播放
-            const int maxBatchSamples = 24000; // 最多1秒的音频
-            var batchData = new List<short>();
-            
-            while (_audioBufferQueue.Count > 0 && batchData.Count < maxBatchSamples)
-            {
-                if (_audioBufferQueue.TryDequeue(out var pcmPacket))
-                {
-                    batchData.AddRange(pcmPacket);
-                }
-                else
-                {
-                    break;
-                }
-            }
-            
-            return batchData.Count > 0 ? batchData.ToArray() : null;
         }
         
         private short[]? DecodeOpusToShortArray(byte[] opusData)
         {
+            if (_opusDecoder == null)
+            {
+                MainThread.BeginInvokeOnMainThread(() => AddSystemMessage("❌ 解码器未初始化"));
+                return null;
+            }
+            
             try
             {
                 // 🔧 与PC版本完全一致的处理方式
-                const int SampleRate = 24000;
-                const int Channels = 1;
-                const int FrameSize = SampleRate * 60 / 1000; // 1440 - 与PC版本相同
+                const int FrameSize = 1440; // 60ms @ 24kHz
                 
-                // 创建Opus解码器 (与PC版本完全相同的参数)
-                using var decoder = new OpusDecoder(SampleRate, Channels);
-                
-                // 直接解码原始数据
+                // 关键修复：使用共享的解码器实例
                 short[] pcmData = new short[FrameSize * 10];
-                int decodedSamples = decoder.Decode(opusData, opusData.Length, pcmData, FrameSize * 10, false);
+                int decodedSamples = _opusDecoder.Decode(opusData, opusData.Length, pcmData, FrameSize * 10, false);
                 
                 if (decodedSamples > 0)
                 {
@@ -1458,29 +1432,13 @@ namespace XiaoZhiSharpMAUI
                     Array.Copy(pcmData, 0, validPcmData, 0, decodedSamples);
                     return validPcmData;
                 }
-                else
-                {
-                    // 如果直接解码失败，尝试手动去除RTP头
-                    var payload = ExtractOpusPayload(opusData);
-                    if (payload != null)
-                    {
-                        using var decoder2 = new OpusDecoder(SampleRate, Channels);
-                        int decodedSamples2 = decoder2.Decode(payload, payload.Length, pcmData, FrameSize * 10, false);
-                        
-                        if (decodedSamples2 > 0)
-                        {
-                            short[] validPcmData2 = new short[decodedSamples2];
-                            Array.Copy(pcmData, 0, validPcmData2, 0, decodedSamples2);
-                            return validPcmData2;
-                        }
-                    }
-                }
                 
                 return null;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error decoding Opus to short array");
+                MainThread.BeginInvokeOnMainThread(() => AddSystemMessage($"❌ Opus解码失败: {ex.Message}"));
                 return null;
             }
         }
@@ -1623,55 +1581,9 @@ namespace XiaoZhiSharpMAUI
         
         private byte[] CreateWavFromPcm(short[] pcmData, int samples, int sampleRate, int channels)
         {
-            // 🔧 详细调试：确保WAV格式完全正确
+            // 🔧 简化WAV生成：减少UI更新提高性能
             const int bitsPerSample = 16;
             int dataSize = samples * channels * (bitsPerSample / 8);
-            int totalFileSize = 36 + dataSize;
-            
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                AddSystemMessage($"🔧 WAV生成详情:");
-                AddSystemMessage($"  • 采样数: {samples}");
-                AddSystemMessage($"  • 采样率: {sampleRate}Hz");
-                AddSystemMessage($"  • 声道数: {channels}");
-                AddSystemMessage($"  • 位深度: {bitsPerSample}位");
-                AddSystemMessage($"  • 数据大小: {dataSize}字节");
-                AddSystemMessage($"  • 文件总大小: {totalFileSize}字节");
-                
-                // 显示PCM数据的统计信息
-                if (samples > 0)
-                {
-                    short minSample = short.MaxValue;
-                    short maxSample = short.MinValue;
-                    long sumSquares = 0;
-                    
-                    for (int i = 0; i < samples; i++)
-                    {
-                        short sample = pcmData[i];
-                        if (sample < minSample) minSample = sample;
-                        if (sample > maxSample) maxSample = sample;
-                        sumSquares += (long)sample * sample;
-                    }
-                    
-                    double rms = Math.Sqrt((double)sumSquares / samples);
-                    AddSystemMessage($"  • PCM范围: {minSample} 到 {maxSample}");
-                    AddSystemMessage($"  • RMS音量: {rms:F1}");
-                    
-                    // 检查是否有实际音频信号
-                    if (maxSample == 0 && minSample == 0)
-                    {
-                        AddSystemMessage("⚠️ 警告: PCM数据全为零（静音）");
-                    }
-                    else if (Math.Abs(maxSample) < 100 && Math.Abs(minSample) < 100)
-                    {
-                        AddSystemMessage("⚠️ 警告: PCM音量极低，可能听不见");
-                    }
-                    else
-                    {
-                        AddSystemMessage("✅ PCM数据包含有效音频信号");
-                    }
-                }
-            });
             
             using var stream = new MemoryStream();
             using var writer = new BinaryWriter(stream);
@@ -1695,80 +1607,13 @@ namespace XiaoZhiSharpMAUI
             writer.Write(System.Text.Encoding.ASCII.GetBytes("data"));        // Subchunk2ID
             writer.Write(dataSize);                                            // Subchunk2Size
             
-            // 🔧 写入PCM数据并进行验证
-            long totalBytes = 0;
+            // 写入PCM数据
             for (int i = 0; i < samples; i++)
             {
                 writer.Write(pcmData[i]);
-                totalBytes += 2; // 每个short是2字节
             }
             
-            var result = stream.ToArray();
-            
-            // 🔧 最终验证
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                AddSystemMessage($"✅ WAV创建完成: {result.Length}字节");
-                AddSystemMessage($"  • 预期大小: {totalFileSize}字节");
-                AddSystemMessage($"  • 实际大小: {result.Length}字节");
-                AddSystemMessage($"  • 数据写入: {totalBytes}字节");
-                
-                if (result.Length == totalFileSize)
-                {
-                    AddSystemMessage("✅ WAV文件大小正确");
-                }
-                else
-                {
-                    AddSystemMessage($"❌ WAV文件大小不匹配！");
-                }
-                
-                // 显示WAV文件头部的十六进制
-                var headerHex = string.Join(" ", result.Take(44).Select(b => $"{b:X2}"));
-                AddSystemMessage($"🔍 WAV头部: {headerHex}");
-            });
-            
-            return result;
-        }
-        
-        private void LogAudioDataInfo(byte[] audioData)
-        {
-            try
-            {
-                AddSystemMessage($"📊 音频数据分析:");
-                AddSystemMessage($"  • 数据长度: {audioData.Length} 字节");
-                
-                if (audioData.Length >= 4)
-                {
-                    // 显示前4个字节的十六进制
-                    var hex = string.Join(" ", audioData.Take(4).Select(b => $"{b:X2}"));
-                    AddSystemMessage($"  • 开头字节: {hex}");
-                }
-                
-                if (audioData.Length >= 12)
-                {
-                    // 检查是否可能是RTP包
-                    byte firstByte = audioData[0];
-                    int version = (firstByte >> 6) & 0x03;
-                    byte secondByte = audioData[1];
-                    int payloadType = secondByte & 0x7F;
-                    
-                    AddSystemMessage($"  • 可能格式: RTP (版本={version}, 载荷类型={payloadType})");
-                    
-                    if (version == 2)
-                    {
-                        AddSystemMessage("✅ 检测到有效的RTP包");
-                    }
-                }
-                
-                // 提供积极的反馈
-                AddSystemMessage("🎵 Android版本现已支持Opus音频解码！");
-                AddSystemMessage("💡 OpusSharp库正在处理音频数据 (与PC版本相同)");
-                AddSystemMessage("🔄 如果解码失败，将播放测试音频确保功能正常");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error logging audio data info");
-            }
+            return stream.ToArray();
         }
     }
 }
