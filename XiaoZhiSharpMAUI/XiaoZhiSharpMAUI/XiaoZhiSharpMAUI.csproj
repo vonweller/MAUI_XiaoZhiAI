@@ -73,6 +73,7 @@
     
     <!-- MAUI Audio plugin -->
     <PackageReference Include="Plugin.Maui.Audio" Version="2.1.0" />
+    <PackageReference Include="OpusSharp" Version="1.5.5" />
   </ItemGroup>
 
   <ItemGroup>

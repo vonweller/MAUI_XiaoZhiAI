@@ -1,0 +1,891 @@
+@page "/android-network-diagnostic"
+@using Microsoft.Maui.ApplicationModel
+@using Microsoft.Maui.Networking
+@using Microsoft.Extensions.Logging
+@using System.Net.NetworkInformation
+@using System.Net.Http
+@using System.Net.WebSockets
+@inject ILogger<AndroidNetworkDiagnosticPage> Logger
+@implements IDisposable
+
+<div class="container-fluid p-3">
+    <h3>📱 Android 网络诊断工具</h3>
+    
+    <div class="alert alert-info">
+        <h6>🔍 诊断目标:</h6>
+        <p>检测Android设备上的网络连接问题，确定WebSocket连接失败的根本原因。</p>
+    </div>
+    
+    <!-- 总体状态 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>📊 总体诊断状态</h5>
+                </div>
+                <div class="card-body">
+                    <div class="progress mb-3">
+                        <div class="progress-bar @GetProgressClass()" 
+                             role="progressbar" 
+                             style="width: @(testProgress)%" 
+                             aria-valuenow="@testProgress" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                            @testProgress%
+                        </div>
+                    </div>
+                    <p><strong>当前测试:</strong> @currentTest</p>
+                    <p><strong>总体状态:</strong> <span class="@GetOverallStatusClass()">@overallStatus</span></p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 控制按钮 -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-primary" 
+                        @onclick="RunFullDiagnostic" 
+                        disabled="@isRunning">
+                    🔍 开始完整诊断
+                </button>
+                <button class="btn btn-warning" 
+                        @onclick="RunBasicTests" 
+                        disabled="@isRunning">
+                    ⚡ 快速测试
+                </button>
+                <button class="btn btn-info" 
+                        @onclick="TestWebSocketOnly" 
+                        disabled="@isRunning">
+                    🔌 仅测试WebSocket
+                </button>
+                <button class="btn btn-secondary" 
+                        @onclick="ClearResults">
+                    🗑️ 清空结果
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 测试结果 -->
+    <div class="row">
+        <!-- 权限测试 -->
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h6>🛡️ 权限检查 @GetTestIcon(permissionStatus)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>网络权限:</strong> 
+                        <span class="@GetStatusClass(networkPermissionStatus)">@networkPermissionStatus</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>WiFi权限:</strong> 
+                        <span class="@GetStatusClass(wifiPermissionStatus)">@wifiPermissionStatus</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>网络状态权限:</strong> 
+                        <span class="@GetStatusClass(networkStatePermissionStatus)">@networkStatePermissionStatus</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 网络状态 -->
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h6>🌐 网络状态 @GetTestIcon(connectivityStatus)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>网络访问:</strong> 
+                        <span class="@GetStatusClass(networkAccess)">@networkAccess</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>连接配置:</strong> 
+                        <span class="@GetStatusClass(connectionProfiles)">@connectionProfiles</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>网络接口:</strong> 
+                        <span class="@GetStatusClass(networkInterfaces)">@networkInterfaces</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- DNS解析 -->
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h6>🔗 DNS解析 @GetTestIcon(dnsStatus)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>api.tenclass.net:</strong> 
+                        <span class="@GetStatusClass(dnsTestResult)">@dnsTestResult</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>google.com:</strong> 
+                        <span class="@GetStatusClass(dnsGoogleResult)">@dnsGoogleResult</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>解析时间:</strong> @dnsResolveTime
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- HTTP连接 -->
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h6>🌍 HTTP连接 @GetTestIcon(httpStatus)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong>HTTPS Google:</strong> 
+                        <span class="@GetStatusClass(httpGoogleResult)">@httpGoogleResult</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>HTTPS API服务器:</strong> 
+                        <span class="@GetStatusClass(httpApiResult)">@httpApiResult</span>
+                    </div>
+                    <div class="mb-2">
+                        <strong>响应时间:</strong> @httpResponseTime
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- WebSocket连接 -->
+        <div class="col-md-12 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <h6>🔌 WebSocket连接 @GetTestIcon(webSocketStatus)</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-2">
+                                <strong>Echo测试:</strong> 
+                                <span class="@GetStatusClass(webSocketEchoResult)">@webSocketEchoResult</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-2">
+                                <strong>API连接:</strong> 
+                                <span class="@GetStatusClass(webSocketApiResult)">@webSocketApiResult</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-2">
+                                <strong>连接时间:</strong> @webSocketConnectTime
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <strong>详细错误:</strong> <small class="text-muted">@webSocketError</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 详细日志 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6>📝 详细日志</h6>
+                    <span class="badge bg-primary">@diagnosticLogs.Count 条记录</span>
+                </div>
+                <div class="card-body">
+                    <div class="log-container" style="height: 300px; overflow-y: auto; background-color: #f8f9fa; padding: 10px; font-family: monospace; font-size: 11px;">
+                        @foreach (var log in diagnosticLogs.OrderByDescending(l => l.Timestamp))
+                        {
+                            <div class="@GetLogClass(log.Level)">
+                                <span class="text-muted">[@log.Timestamp.ToString("HH:mm:ss.fff")]</span>
+                                <span class="fw-bold">[@log.Level]</span>
+                                @log.Message
+                            </div>
+                        }
+                        @if (!diagnosticLogs.Any())
+                        {
+                            <div class="text-muted">点击开始诊断...</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // 测试状态
+    private bool isRunning = false;
+    private int testProgress = 0;
+    private string currentTest = "等待开始";
+    private string overallStatus = "未开始";
+    
+    // 权限测试结果
+    private string permissionStatus = "未测试";
+    private string networkPermissionStatus = "未测试";
+    private string wifiPermissionStatus = "未测试";
+    private string networkStatePermissionStatus = "未测试";
+    
+    // 网络状态结果
+    private string connectivityStatus = "未测试";
+    private string networkAccess = "未测试";
+    private string connectionProfiles = "未测试";
+    private string networkInterfaces = "未测试";
+    
+    // DNS测试结果
+    private string dnsStatus = "未测试";
+    private string dnsTestResult = "未测试";
+    private string dnsGoogleResult = "未测试";
+    private string dnsResolveTime = "未测试";
+    
+    // HTTP测试结果
+    private string httpStatus = "未测试";
+    private string httpGoogleResult = "未测试";
+    private string httpApiResult = "未测试";
+    private string httpResponseTime = "未测试";
+    
+    // WebSocket测试结果
+    private string webSocketStatus = "未测试";
+    private string webSocketEchoResult = "未测试";
+    private string webSocketApiResult = "未测试";
+    private string webSocketConnectTime = "未测试";
+    private string webSocketError = "";
+    
+    // 日志
+    private List<LogEntry> diagnosticLogs = new();
+    private readonly HttpClient httpClient = new();
+    
+    protected override void OnInitialized()
+    {
+        AddLog("Info", "Android网络诊断工具已加载");
+        AddLog("Info", $"设备平台: {DeviceInfo.Platform}");
+        AddLog("Info", $"设备型号: {DeviceInfo.Model}");
+        AddLog("Info", $"操作系统: {DeviceInfo.VersionString}");
+    }
+    
+    private async Task RunFullDiagnostic()
+    {
+        if (isRunning) return;
+        
+        try
+        {
+            isRunning = true;
+            testProgress = 0;
+            overallStatus = "诊断中...";
+            ClearResults();
+            
+            AddLog("Info", "=== 开始完整网络诊断 ===");
+            
+            // 1. 权限检查 (20%)
+            await TestPermissions();
+            testProgress = 20;
+            StateHasChanged();
+            
+            // 2. 网络状态检查 (40%)
+            await TestNetworkConnectivity();
+            testProgress = 40;
+            StateHasChanged();
+            
+            // 3. DNS解析测试 (60%)
+            await TestDNSResolution();
+            testProgress = 60;
+            StateHasChanged();
+            
+            // 4. HTTP连接测试 (80%)
+            await TestHttpConnections();
+            testProgress = 80;
+            StateHasChanged();
+            
+            // 5. WebSocket连接测试 (100%)
+            await TestWebSocketConnections();
+            testProgress = 100;
+            StateHasChanged();
+            
+            // 分析结果
+            AnalyzeResults();
+            
+            AddLog("Success", "=== 完整诊断完成 ===");
+        }
+        catch (Exception ex)
+        {
+            AddLog("Error", $"诊断过程出错: {ex.Message}");
+            overallStatus = "诊断失败";
+        }
+        finally
+        {
+            isRunning = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task RunBasicTests()
+    {
+        if (isRunning) return;
+        
+        try
+        {
+            isRunning = true;
+            testProgress = 0;
+            overallStatus = "快速测试中...";
+            
+            AddLog("Info", "=== 开始快速网络测试 ===");
+            
+            await TestPermissions();
+            testProgress = 50;
+            StateHasChanged();
+            
+            await TestNetworkConnectivity();
+            testProgress = 100;
+            StateHasChanged();
+            
+            AddLog("Success", "=== 快速测试完成 ===");
+            overallStatus = "快速测试完成";
+        }
+        catch (Exception ex)
+        {
+            AddLog("Error", $"快速测试出错: {ex.Message}");
+            overallStatus = "测试失败";
+        }
+        finally
+        {
+            isRunning = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task TestWebSocketOnly()
+    {
+        if (isRunning) return;
+        
+        try
+        {
+            isRunning = true;
+            testProgress = 0;
+            overallStatus = "WebSocket测试中...";
+            
+            AddLog("Info", "=== 开始WebSocket专项测试 ===");
+            
+            await TestWebSocketConnections();
+            testProgress = 100;
+            StateHasChanged();
+            
+            AddLog("Success", "=== WebSocket测试完成 ===");
+            overallStatus = "WebSocket测试完成";
+        }
+        catch (Exception ex)
+        {
+            AddLog("Error", $"WebSocket测试出错: {ex.Message}");
+            overallStatus = "测试失败";
+        }
+        finally
+        {
+            isRunning = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task TestPermissions()
+    {
+        currentTest = "检查权限...";
+        AddLog("Info", "开始权限检查");
+        
+        try
+        {
+            // 检查网络权限
+            var networkPermission = await Permissions.CheckStatusAsync<Permissions.NetworkState>();
+            networkPermissionStatus = networkPermission.ToString();
+            AddLog("Info", $"网络权限: {networkPermissionStatus}");
+            
+            // 在Android上，网络权限通常是自动授予的，不需要用户授权
+            if (networkPermission != PermissionStatus.Granted)
+            {
+                AddLog("Warning", "网络权限未授予，尝试请求权限");
+                var requestResult = await Permissions.RequestAsync<Permissions.NetworkState>();
+                networkPermissionStatus = requestResult.ToString();
+            }
+            
+            wifiPermissionStatus = "自动授予"; // WiFi状态权限是自动的
+            networkStatePermissionStatus = "自动授予"; // 网络状态权限是自动的
+            
+            permissionStatus = "检查完成";
+            AddLog("Success", "权限检查完成");
+        }
+        catch (Exception ex)
+        {
+            permissionStatus = "检查失败";
+            AddLog("Error", $"权限检查失败: {ex.Message}");
+        }
+    }
+    
+    private async Task TestNetworkConnectivity()
+    {
+        currentTest = "检查网络连接...";
+        AddLog("Info", "开始网络连接检查");
+        
+        try
+        {
+            // 检查网络访问
+            var access = Connectivity.NetworkAccess;
+            networkAccess = access.ToString();
+            AddLog("Info", $"网络访问: {networkAccess}");
+            
+            // 检查连接配置
+            var profiles = Connectivity.ConnectionProfiles;
+            connectionProfiles = string.Join(", ", profiles);
+            AddLog("Info", $"连接配置: {connectionProfiles}");
+            
+            // 检查网络接口
+            var interfaces = NetworkInterface.GetAllNetworkInterfaces();
+            var activeInterfaces = interfaces.Where(i => i.OperationalStatus == OperationalStatus.Up).ToList();
+            networkInterfaces = $"{activeInterfaces.Count} 个活动接口";
+            AddLog("Info", $"网络接口: {networkInterfaces}");
+            
+            foreach (var intf in activeInterfaces.Take(3))
+            {
+                AddLog("Debug", $"接口: {intf.Name} - {intf.NetworkInterfaceType} - {intf.OperationalStatus}");
+            }
+            
+            connectivityStatus = "检查完成";
+            AddLog("Success", "网络连接检查完成");
+        }
+        catch (Exception ex)
+        {
+            connectivityStatus = "检查失败";
+            AddLog("Error", $"网络连接检查失败: {ex.Message}");
+        }
+    }
+    
+    private async Task TestDNSResolution()
+    {
+        currentTest = "测试DNS解析...";
+        AddLog("Info", "开始DNS解析测试");
+        
+        try
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            // 测试API服务器DNS解析
+            try
+            {
+                var apiHost = "api.tenclass.net";
+                var apiAddresses = await System.Net.Dns.GetHostAddressesAsync(apiHost);
+                dnsTestResult = $"成功 ({apiAddresses.Length} 个地址)";
+                AddLog("Success", $"API服务器DNS解析成功: {string.Join(", ", apiAddresses.Take(2))}");
+            }
+            catch (Exception ex)
+            {
+                dnsTestResult = "失败";
+                AddLog("Error", $"API服务器DNS解析失败: {ex.Message}");
+            }
+            
+            // 测试Google DNS解析
+            try
+            {
+                var googleAddresses = await System.Net.Dns.GetHostAddressesAsync("google.com");
+                dnsGoogleResult = $"成功 ({googleAddresses.Length} 个地址)";
+                AddLog("Success", $"Google DNS解析成功: {string.Join(", ", googleAddresses.Take(2))}");
+            }
+            catch (Exception ex)
+            {
+                dnsGoogleResult = "失败";
+                AddLog("Error", $"Google DNS解析失败: {ex.Message}");
+            }
+            
+            stopwatch.Stop();
+            dnsResolveTime = $"{stopwatch.ElapsedMilliseconds}ms";
+            dnsStatus = "测试完成";
+            AddLog("Success", $"DNS解析测试完成，耗时: {dnsResolveTime}");
+        }
+        catch (Exception ex)
+        {
+            dnsStatus = "测试失败";
+            AddLog("Error", $"DNS解析测试失败: {ex.Message}");
+        }
+    }
+    
+    private async Task TestHttpConnections()
+    {
+        currentTest = "测试HTTP连接...";
+        AddLog("Info", "开始HTTP连接测试");
+        
+        try
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            // 测试Google HTTPS连接
+            try
+            {
+                var googleResponse = await httpClient.GetAsync("https://www.google.com", new CancellationTokenSource(10000).Token);
+                httpGoogleResult = $"成功 ({googleResponse.StatusCode})";
+                AddLog("Success", $"Google HTTPS连接成功: {googleResponse.StatusCode}");
+            }
+            catch (Exception ex)
+            {
+                httpGoogleResult = "失败";
+                AddLog("Error", $"Google HTTPS连接失败: {ex.Message}");
+            }
+            
+            // 测试API服务器HTTPS连接
+            try
+            {
+                var apiUrl = "https://api.tenclass.net/";
+                var apiResponse = await httpClient.GetAsync(apiUrl, new CancellationTokenSource(10000).Token);
+                httpApiResult = $"成功 ({apiResponse.StatusCode})";
+                AddLog("Success", $"API服务器HTTPS连接成功: {apiResponse.StatusCode}");
+            }
+            catch (Exception ex)
+            {
+                httpApiResult = "失败";
+                AddLog("Error", $"API服务器HTTPS连接失败: {ex.Message}");
+            }
+            
+            stopwatch.Stop();
+            httpResponseTime = $"{stopwatch.ElapsedMilliseconds}ms";
+            httpStatus = "测试完成";
+            AddLog("Success", $"HTTP连接测试完成，耗时: {httpResponseTime}");
+        }
+        catch (Exception ex)
+        {
+            httpStatus = "测试失败";
+            AddLog("Error", $"HTTP连接测试失败: {ex.Message}");
+        }
+    }
+    
+    private async Task TestWebSocketConnections()
+    {
+        currentTest = "测试WebSocket连接...";
+        AddLog("Info", "开始WebSocket连接测试");
+        
+        try
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            // 测试WebSocket Echo服务器
+            await TestWebSocketEcho();
+            
+            // 测试API WebSocket连接
+            await TestWebSocketAPI();
+            
+            stopwatch.Stop();
+            webSocketConnectTime = $"{stopwatch.ElapsedMilliseconds}ms";
+            webSocketStatus = "测试完成";
+            AddLog("Success", $"WebSocket连接测试完成，耗时: {webSocketConnectTime}");
+        }
+        catch (Exception ex)
+        {
+            webSocketStatus = "测试失败";
+            webSocketError = ex.Message;
+            AddLog("Error", $"WebSocket连接测试失败: {ex.Message}");
+        }
+    }
+    
+    private async Task TestWebSocketEcho()
+    {
+        try
+        {
+            using var webSocket = new ClientWebSocket();
+            var cts = new CancellationTokenSource(10000); // 10秒超时
+            
+            AddLog("Info", "连接WebSocket Echo服务器...");
+            await webSocket.ConnectAsync(new Uri("wss://echo.websocket.org/"), cts.Token);
+            
+            if (webSocket.State == WebSocketState.Open)
+            {
+                webSocketEchoResult = "成功";
+                AddLog("Success", "WebSocket Echo连接成功");
+                
+                // 发送测试消息
+                var testMessage = "Hello Echo Test";
+                var buffer = System.Text.Encoding.UTF8.GetBytes(testMessage);
+                await webSocket.SendAsync(new ArraySegment<byte>(buffer), WebSocketMessageType.Text, true, cts.Token);
+                AddLog("Info", "发送Echo测试消息");
+                
+                // 接收回显
+                var receiveBuffer = new byte[1024];
+                var result = await webSocket.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), cts.Token);
+                var receivedMessage = System.Text.Encoding.UTF8.GetString(receiveBuffer, 0, result.Count);
+                AddLog("Success", $"收到Echo回显: {receivedMessage}");
+                
+                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test complete", CancellationToken.None);
+            }
+            else
+            {
+                webSocketEchoResult = "连接失败";
+                AddLog("Error", $"WebSocket Echo连接状态异常: {webSocket.State}");
+            }
+        }
+        catch (Exception ex)
+        {
+            webSocketEchoResult = "失败";
+            AddLog("Error", $"WebSocket Echo测试失败: {ex.Message}");
+        }
+    }
+    
+    private async Task TestWebSocketAPI()
+    {
+        try
+        {
+            using var webSocket = new ClientWebSocket();
+            var cts = new CancellationTokenSource(10000); // 10秒超时
+            
+            // 设置请求头
+            var token = "test-token";
+            var deviceId = XiaoZhiSharp.Utils.SystemInfo.GetMacAddress();
+            
+            webSocket.Options.SetRequestHeader("Authorization", $"Bearer {token}");
+            webSocket.Options.SetRequestHeader("Protocol-Version", "1");
+            webSocket.Options.SetRequestHeader("Device-Id", deviceId);
+            webSocket.Options.SetRequestHeader("Client-Id", Guid.NewGuid().ToString());
+            
+            AddLog("Info", "连接API WebSocket服务器...");
+            AddLog("Info", $"URL: wss://api.tenclass.net/xiaozhi/v1/");
+            AddLog("Info", $"Token: {token}");
+            AddLog("Info", $"Device-Id: {deviceId}");
+            
+            await webSocket.ConnectAsync(new Uri("wss://api.tenclass.net/xiaozhi/v1/"), cts.Token);
+            
+            if (webSocket.State == WebSocketState.Open)
+            {
+                webSocketApiResult = "成功";
+                AddLog("Success", "API WebSocket连接成功！");
+                
+                await webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Test complete", CancellationToken.None);
+            }
+            else
+            {
+                webSocketApiResult = "连接失败";
+                AddLog("Error", $"API WebSocket连接状态异常: {webSocket.State}");
+            }
+        }
+        catch (Exception ex)
+        {
+            webSocketApiResult = "失败";
+            webSocketError = ex.Message;
+            AddLog("Error", $"API WebSocket测试失败: {ex.Message}");
+            
+            // 详细分析错误
+            if (ex.Message.Contains("401"))
+            {
+                AddLog("Warning", "可能的原因: Token无效或已过期");
+            }
+            else if (ex.Message.Contains("403"))
+            {
+                AddLog("Warning", "可能的原因: 设备未授权或权限不足");
+            }
+            else if (ex.Message.Contains("timeout"))
+            {
+                AddLog("Warning", "可能的原因: 网络连接超时");
+            }
+            else if (ex.Message.Contains("SSL") || ex.Message.Contains("TLS"))
+            {
+                AddLog("Warning", "可能的原因: SSL/TLS证书验证失败");
+            }
+        }
+    }
+    
+    private void AnalyzeResults()
+    {
+        var issues = new List<string>();
+        var successes = new List<string>();
+        
+        // 分析各项测试结果
+        if (networkAccess != "Internet")
+        {
+            issues.Add("网络访问受限");
+        }
+        else
+        {
+            successes.Add("网络访问正常");
+        }
+        
+        if (dnsTestResult.Contains("失败"))
+        {
+            issues.Add("DNS解析失败");
+        }
+        else if (dnsTestResult.Contains("成功"))
+        {
+            successes.Add("DNS解析正常");
+        }
+        
+        if (httpApiResult.Contains("失败"))
+        {
+            issues.Add("HTTPS连接失败");
+        }
+        else if (httpApiResult.Contains("成功"))
+        {
+            successes.Add("HTTPS连接正常");
+        }
+        
+        if (webSocketEchoResult.Contains("失败"))
+        {
+            issues.Add("WebSocket基础连接失败");
+        }
+        else if (webSocketEchoResult.Contains("成功"))
+        {
+            successes.Add("WebSocket基础连接正常");
+        }
+        
+        if (webSocketApiResult.Contains("失败"))
+        {
+            issues.Add("API WebSocket连接失败");
+        }
+        else if (webSocketApiResult.Contains("成功"))
+        {
+            successes.Add("API WebSocket连接正常");
+        }
+        
+        // 输出分析结果
+        AddLog("Info", "=== 诊断结果分析 ===");
+        
+        if (successes.Any())
+        {
+            AddLog("Success", $"✅ 正常项目: {string.Join(", ", successes)}");
+        }
+        
+        if (issues.Any())
+        {
+            AddLog("Error", $"❌ 问题项目: {string.Join(", ", issues)}");
+            overallStatus = "发现问题";
+            
+            // 提供解决建议
+            AddLog("Info", "=== 解决建议 ===");
+            
+            if (issues.Contains("网络访问受限"))
+            {
+                AddLog("Warning", "建议: 检查设备网络连接，确保已连接到互联网");
+            }
+            
+            if (issues.Contains("DNS解析失败"))
+            {
+                AddLog("Warning", "建议: 检查DNS设置，尝试使用其他DNS服务器");
+            }
+            
+            if (issues.Contains("HTTPS连接失败"))
+            {
+                AddLog("Warning", "建议: 检查网络防火墙设置和SSL证书配置");
+            }
+            
+            if (issues.Contains("WebSocket基础连接失败"))
+            {
+                AddLog("Warning", "建议: WebSocket协议可能被网络环境阻止");
+            }
+            
+            if (issues.Contains("API WebSocket连接失败"))
+            {
+                AddLog("Warning", "建议: 检查API Token和设备授权状态");
+            }
+        }
+        else
+        {
+            overallStatus = "所有测试通过";
+            AddLog("Success", "🎉 所有网络测试都通过了！");
+        }
+    }
+    
+    private void ClearResults()
+    {
+        // 重置所有状态
+        permissionStatus = networkPermissionStatus = wifiPermissionStatus = networkStatePermissionStatus = "未测试";
+        connectivityStatus = networkAccess = connectionProfiles = networkInterfaces = "未测试";
+        dnsStatus = dnsTestResult = dnsGoogleResult = dnsResolveTime = "未测试";
+        httpStatus = httpGoogleResult = httpApiResult = httpResponseTime = "未测试";
+        webSocketStatus = webSocketEchoResult = webSocketApiResult = webSocketConnectTime = "未测试";
+        webSocketError = "";
+        
+        diagnosticLogs.Clear();
+        AddLog("Info", "诊断结果已清空");
+    }
+    
+    // UI辅助方法
+    private string GetTestIcon(string status)
+    {
+        return status switch
+        {
+            "检查完成" or "测试完成" => "✅",
+            "检查失败" or "测试失败" => "❌",
+            "未测试" => "⏳",
+            _ => "🔄"
+        };
+    }
+    
+    private string GetStatusClass(string status)
+    {
+        if (status.Contains("成功") || status.Contains("完成") || status == "Internet" || status == "Granted")
+            return "text-success";
+        if (status.Contains("失败") || status.Contains("错误"))
+            return "text-danger";
+        if (status.Contains("未测试") || status.Contains("警告"))
+            return "text-warning";
+        return "text-muted";
+    }
+    
+    private string GetProgressClass()
+    {
+        if (testProgress >= 100) return "bg-success";
+        if (testProgress >= 80) return "bg-info";
+        if (testProgress >= 40) return "bg-warning";
+        return "bg-primary";
+    }
+    
+    private string GetOverallStatusClass()
+    {
+        if (overallStatus.Contains("通过") || overallStatus.Contains("完成"))
+            return "text-success fw-bold";
+        if (overallStatus.Contains("问题") || overallStatus.Contains("失败"))
+            return "text-danger fw-bold";
+        return "text-primary";
+    }
+    
+    private string GetLogClass(string level)
+    {
+        return level switch
+        {
+            "Error" => "text-danger",
+            "Success" => "text-success",
+            "Warning" => "text-warning",
+            "Debug" => "text-secondary",
+            _ => "text-muted"
+        };
+    }
+    
+    private void AddLog(string level, string message)
+    {
+        diagnosticLogs.Add(new LogEntry
+        {
+            Timestamp = DateTime.Now,
+            Level = level,
+            Message = message
+        });
+        
+        // 保持日志数量
+        if (diagnosticLogs.Count > 200)
+        {
+            diagnosticLogs.RemoveAt(0);
+        }
+        
+        // 同时输出到控制台
+        Logger.LogInformation($"[{level}] {message}");
+    }
+    
+    public void Dispose()
+    {
+        httpClient?.Dispose();
+    }
+    
+    private class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Level { get; set; } = "";
+        public string Message { get; set; } = "";
+    }
+} 

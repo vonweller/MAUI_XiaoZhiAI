@@ -77,25 +77,67 @@
                 Padding="10"
                 Stroke="#E0E0E0"
                 StrokeThickness="1">
-            <StackLayout Orientation="Horizontal" 
-                         HorizontalOptions="Center" 
-                         Spacing="20">
+            <StackLayout Spacing="15">
                 
-                <Button x:Name="RecordButton" 
-                        Text="🎤 开始录音"
-                        BackgroundColor="#4CAF50"
-                        TextColor="White"
-                        FontSize="16"
-                        WidthRequest="150"
-                        HeightRequest="50"
-                        CornerRadius="25"
-                        Clicked="OnRecordButtonClicked" />
+                <!-- 录音控制区域 -->
+                <StackLayout Orientation="Horizontal" 
+                             HorizontalOptions="Center" 
+                             Spacing="20">
+                    
+                    <Button x:Name="RecordButton" 
+                            Text="🎤 开始录音"
+                            BackgroundColor="#4CAF50"
+                            TextColor="White"
+                            FontSize="16"
+                            WidthRequest="150"
+                            HeightRequest="50"
+                            CornerRadius="25"
+                            Clicked="OnRecordButtonClicked" />
+                    
+                    <Label x:Name="RecordingStatusLabel" 
+                           Text="准备录音"
+                           FontSize="14"
+                           TextColor="#666666"
+                           VerticalOptions="Center" />
+                    
+                </StackLayout>
                 
-                <Label x:Name="RecordingStatusLabel" 
-                       Text="准备录音"
-                       FontSize="14"
-                       TextColor="#666666"
-                       VerticalOptions="Center" />
+                <!-- 诊断工具区域 -->
+                <StackLayout Orientation="Horizontal" 
+                             HorizontalOptions="Center" 
+                             Spacing="10">
+                    
+                    <Button x:Name="NetworkDiagnosticButton" 
+                            Text="🔍 网络诊断"
+                            BackgroundColor="#FF9800"
+                            TextColor="White"
+                            FontSize="14"
+                            WidthRequest="120"
+                            HeightRequest="40"
+                            CornerRadius="20"
+                            Clicked="OnNetworkDiagnosticClicked" />
+                    
+                    <Button x:Name="WebSocketTestButton" 
+                            Text="🔌 连接测试"
+                            BackgroundColor="#9C27B0"
+                            TextColor="White"
+                            FontSize="14"
+                            WidthRequest="120"
+                            HeightRequest="40"
+                            CornerRadius="20"
+                            Clicked="OnWebSocketTestClicked" />
+                    
+                    <Button x:Name="ReconnectButton" 
+                            Text="🔄 重新连接"
+                            BackgroundColor="#F44336"
+                            TextColor="White"
+                            FontSize="14"
+                            WidthRequest="120"
+                            HeightRequest="40"
+                            CornerRadius="20"
+                            Clicked="OnReconnectClicked" />
+                    
+                </StackLayout>
                 
             </StackLayout>
         </Border>
