@@ -22,6 +22,8 @@ namespace XiaoZhiAI_MAUI
     		builder.Logging.AddDebug();
 #endif
             builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
+            builder.Services.AddSingleton<Pages.SettingsPage>();
+            builder.Services.AddSingleton<Pages.ChatPage>();
 
             return builder.Build();
         }

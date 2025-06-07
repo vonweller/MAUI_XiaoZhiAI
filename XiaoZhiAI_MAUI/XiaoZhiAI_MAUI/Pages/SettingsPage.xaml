@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="XiaoZhiAI_MAUI.Pages.SettingsPage"
+             Title="设置">
+    <ScrollView>
+        <VerticalStackLayout Spacing="20" Padding="30">
+            <Label Text="服务器URL" Style="{StaticResource Title3}" />
+            <Entry x:Name="UrlEntry" Placeholder="输入服务器URL" />
+            <Label Text="MAC地址" Style="{StaticResource Title3}" />
+            <Entry x:Name="MacEntry" Placeholder="输入MAC地址" />
+            <Label Text="OTA地址" Style="{StaticResource Title3}" />
+            <Entry x:Name="OtaEntry" Placeholder="输入OTA地址" />
+            <Button Text="保存" Clicked="OnSaveClicked" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage> 

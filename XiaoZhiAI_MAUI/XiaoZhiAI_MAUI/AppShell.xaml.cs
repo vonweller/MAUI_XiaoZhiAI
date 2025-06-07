@@ -11,6 +11,8 @@ namespace XiaoZhiAI_MAUI
             InitializeComponent();
 
             Routing.RegisterRoute(nameof(Pages.MainPage), typeof(Pages.MainPage));
+            Routing.RegisterRoute(nameof(Pages.SettingsPage), typeof(Pages.SettingsPage));
+            Routing.RegisterRoute(nameof(Pages.ChatPage), typeof(Pages.ChatPage));
         }
     }
 }
