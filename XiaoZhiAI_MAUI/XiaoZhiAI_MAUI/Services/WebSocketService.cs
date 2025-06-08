@@ -16,9 +16,13 @@ public class WebSocketService : IWebSocketService
     private TaskCompletionSource<bool> _serverHelloTcs;
     private static readonly HttpClient _httpClient = new();
 
-    private const string OtaUrl = "https://api.tenclass.net/xiaozhi/ota/";
-    private const string WebSocketUrl = "wss://api.tenclass.net/xiaozhi/v1/";
+    private const string DefaultOtaUrl = "https://api.tenclass.net/xiaozhi/ota/";
+    private const string DefaultWebSocketUrl = "wss://api.tenclass.net/xiaozhi/v1/";
     private const string AccessToken = "test-token"; // Assuming this is correct from original setup
+    
+    // 从设置中获取URL，如果没有则使用默认值
+    private string OtaUrl => Preferences.Get("OtaUrl", DefaultOtaUrl);
+    private string WebSocketUrl => Preferences.Get("ServerUrl", DefaultWebSocketUrl);
 
     private string _sessionId;
     public string SessionId => _sessionId;
@@ -36,9 +40,10 @@ public class WebSocketService : IWebSocketService
 
     public event EventHandler<WebSocketStatus> StatusChanged;
     public event EventHandler<string> MessageReceived;
+    public event EventHandler<byte[]> BinaryMessageReceived;
 
-    private string _webSocketUrl = WebSocketUrl;
-    private string _accessToken = AccessToken;
+    private string _webSocketUrl;
+    private string _accessToken;
     private string _deviceId;
     private string _clientId;
 
@@ -52,6 +57,10 @@ public class WebSocketService : IWebSocketService
         try
         {
             Status = WebSocketStatus.Connecting;
+
+            // 初始化配置
+            _webSocketUrl = WebSocketUrl;
+            _accessToken = AccessToken;
 
             // Step 1: Perform the OTA check and extract websocket url/token
             await PerformOtaCheckAsync(cancellationToken);
@@ -152,6 +161,27 @@ public class WebSocketService : IWebSocketService
         }
     }
 
+    public async Task<bool> SendBinaryAsync(byte[] data, CancellationToken cancellationToken)
+    {
+        if (_client?.State != WebSocketState.Open)
+        {
+            var currentState = _client?.State.ToString() ?? "null";
+            MessageReceived?.Invoke(this, $"Binary send failed. WebSocket client is not open. Current state: {currentState}");
+            return false;
+        }
+
+        try
+        {
+            await _client.SendAsync(new ArraySegment<byte>(data), WebSocketMessageType.Binary, true, cancellationToken);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageReceived?.Invoke(this, $"Binary send exception: {ex.Message}");
+            return false;
+        }
+    }
+
     private async Task ReceiveLoopAsync(CancellationToken cancellationToken)
     {
         var buffer = new ArraySegment<byte>(new byte[8192]);
@@ -174,9 +204,17 @@ public class WebSocketService : IWebSocketService
                 }
 
                 ms.Seek(0, SeekOrigin.Begin);
-                var message = Encoding.UTF8.GetString(ms.ToArray());
                 
-                HandleIncomingMessage(message);
+                if (result.MessageType == WebSocketMessageType.Text)
+                {
+                    var message = Encoding.UTF8.GetString(ms.ToArray());
+                    HandleIncomingMessage(message);
+                }
+                else if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    var binaryData = ms.ToArray();
+                    HandleIncomingBinaryMessage(binaryData);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -192,6 +230,19 @@ public class WebSocketService : IWebSocketService
         await DisconnectInternalAsync();
         if(Status != WebSocketStatus.Error)
             Status = WebSocketStatus.Disconnected;
+    }
+
+    private void HandleIncomingBinaryMessage(byte[] binaryData)
+    {
+        try
+        {
+            // 二进制消息通常是Opus音频数据
+            BinaryMessageReceived?.Invoke(this, binaryData);
+        }
+        catch (Exception ex)
+        {
+            MessageReceived?.Invoke(this, $"Error handling binary message: {ex.Message}");
+        }
     }
 
     private void HandleIncomingMessage(string message)
@@ -233,7 +284,9 @@ public class WebSocketService : IWebSocketService
         MessageReceived?.Invoke(this, $"Performing OTA check to {OtaUrl}...");
         try
         {
-            _deviceId = DeviceInfoHelper.GetDeviceMacAddress().ToLower();
+            // 从设置中获取MAC地址，如果没有则自动获取
+            var savedMac = Preferences.Get("MacAddress", "");
+            _deviceId = string.IsNullOrEmpty(savedMac) ? DeviceInfoHelper.GetDeviceMacAddress().ToLower() : savedMac.ToLower();
             _clientId = DeviceInfoHelper.GetClientId();
             var userAgent = "Unity-ID";
             var acceptLanguage = "zh-CN";
@@ -313,6 +366,27 @@ public class WebSocketService : IWebSocketService
             MessageReceived?.Invoke(this, $"OTA check threw an exception: {ex.Message}");
             throw;
         }
+    }
+
+    public async Task<bool> SendDetectMessageAsync(string text, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(_sessionId))
+        {
+            MessageReceived?.Invoke(this, "Cannot send detect message: session_id is not available");
+            return false;
+        }
+
+        var detectMessage = new
+        {
+            session_id = _sessionId,
+            type = "listen",
+            state = "detect",
+            text = text
+        };
+
+        var message = JsonConvert.SerializeObject(detectMessage);
+        MessageReceived?.Invoke(this, $"Sending detect message: {message}");
+        return await SendTextAsync(message, cancellationToken);
     }
 
     private Task<bool> SendHelloAsync(CancellationToken cancellationToken)

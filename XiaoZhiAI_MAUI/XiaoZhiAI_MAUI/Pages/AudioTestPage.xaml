@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="XiaoZhiAI_MAUI.Pages.AudioTestPage"
+             Title="音频测试">
+    
+    <ScrollView>
+        <StackLayout Padding="20" Spacing="15">
+            
+            <!-- 标题 -->
+            <Label Text="音频功能测试" 
+                   FontSize="24" 
+                   FontAttributes="Bold" 
+                   HorizontalOptions="Center" 
+                   Margin="0,0,0,20"/>
+            
+            <!-- 录音测试区域 -->
+            <Frame BackgroundColor="LightBlue" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="录音测试" FontSize="18" FontAttributes="Bold"/>
+                    
+                    <Button x:Name="RecordButton" 
+                            Text="开始录音" 
+                            BackgroundColor="Green" 
+                            TextColor="White"
+                            Clicked="OnRecordClicked"/>
+                    
+                    <Label x:Name="RecordStatusLabel" 
+                           Text="录音状态: 未开始" 
+                           FontSize="14"/>
+                    
+                    <Label x:Name="AudioDataLabel" 
+                           Text="音频数据: 无" 
+                           FontSize="12"/>
+                </StackLayout>
+            </Frame>
+            
+            <!-- 播放测试区域 -->
+            <Frame BackgroundColor="LightGreen" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="播放测试" FontSize="18" FontAttributes="Bold"/>
+                    
+                    <Button x:Name="PlayTestButton" 
+                            Text="播放测试音调" 
+                            BackgroundColor="Blue" 
+                            TextColor="White"
+                            Clicked="OnPlayTestClicked"/>
+                    
+                    <Label x:Name="PlayStatusLabel" 
+                           Text="播放状态: 未开始" 
+                           FontSize="14"/>
+                </StackLayout>
+            </Frame>
+            
+            <!-- Opus编解码测试 -->
+            <Frame BackgroundColor="LightYellow" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="Opus编解码测试" FontSize="18" FontAttributes="Bold"/>
+                    
+                    <Button x:Name="OpusTestButton" 
+                            Text="测试Opus编解码" 
+                            BackgroundColor="Orange" 
+                            TextColor="White"
+                            Clicked="OnOpusTestClicked"/>
+                    
+                    <Label x:Name="OpusStatusLabel" 
+                           Text="Opus状态: 未测试" 
+                           FontSize="14"/>
+                </StackLayout>
+            </Frame>
+            
+            <!-- 音频服务状态 -->
+            <Frame BackgroundColor="LightCoral" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="音频服务状态" FontSize="18" FontAttributes="Bold"/>
+                    
+                    <Label x:Name="ServiceStatusLabel" 
+                           Text="服务状态: 检查中..." 
+                           FontSize="14"/>
+                    
+                    <Button x:Name="InitServiceButton" 
+                            Text="重新初始化音频服务" 
+                            BackgroundColor="Red" 
+                            TextColor="White"
+                            Clicked="OnInitServiceClicked"/>
+                </StackLayout>
+            </Frame>
+            
+            <!-- 设备信息 -->
+            <Frame BackgroundColor="LightPink" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="设备信息" FontSize="18" FontAttributes="Bold"/>
+                    
+                    <Label x:Name="DeviceInfoLabel" 
+                           Text="设备信息: 获取中..." 
+                           FontSize="12"/>
+                    
+                    <Button x:Name="RefreshDeviceInfoButton" 
+                            Text="刷新设备信息" 
+                            BackgroundColor="Purple" 
+                            TextColor="White"
+                            Clicked="OnRefreshDeviceInfoClicked"/>
+                    
+                    <Button x:Name="ClearMacCacheButton" 
+                            Text="清除MAC地址缓存" 
+                            BackgroundColor="DarkRed" 
+                            TextColor="White"
+                            Clicked="OnClearMacCacheClicked"/>
+                </StackLayout>
+            </Frame>
+            
+            <!-- 日志显示区域 -->
+            <Frame BackgroundColor="LightGray" Padding="15" CornerRadius="10">
+                <StackLayout Spacing="10">
+                    <Label Text="测试日志" FontSize="18" FontAttributes="Bold"/>
+                    
+                    <ScrollView HeightRequest="200">
+                        <Label x:Name="LogLabel" 
+                               Text="等待测试..." 
+                               FontSize="12" 
+                               FontFamily="Courier"/>
+                    </ScrollView>
+                    
+                    <Button x:Name="ClearLogButton" 
+                            Text="清除日志" 
+                            BackgroundColor="Gray" 
+                            TextColor="White"
+                            Clicked="OnClearLogClicked"/>
+                </StackLayout>
+            </Frame>
+            
+        </StackLayout>
+    </ScrollView>
+    
+</ContentPage> 

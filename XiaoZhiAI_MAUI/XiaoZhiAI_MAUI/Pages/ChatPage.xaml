@@ -3,42 +3,84 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="XiaoZhiAI_MAUI.Pages.ChatPage"
              Title="微信聊天">
-    <Grid RowDefinitions="Auto,Auto,*,Auto" BackgroundColor="#F7F7F7">
-        <!-- 顶部蓝色提示区 -->
-        <StackLayout Grid.Row="0" BackgroundColor="#2196F3" Padding="0,10,0,0">
-            <Label Text="播放语音中..." FontSize="20" TextColor="White" HorizontalOptions="Center"/>
-            <Label Text="连接状态：已连接" FontSize="14" TextColor="White" HorizontalOptions="Center"/>
-        </StackLayout>
-        <!-- 功能说明区 -->
-        <Frame Grid.Row="1" BackgroundColor="#E6F0FA" Padding="16,10" HasShadow="False" CornerRadius="0">
-            <VerticalStackLayout Spacing="6">
-                <Label Text="欢迎使用小智AI助手！" FontSize="16" TextColor="#222"/>
-                <Label Text="功能说明：" FontSize="14" TextColor="#222"/>
-                <Label Text="· 点击🎤录音按钮开始语音对话" FontSize="13" TextColor="#222"/>
-                <Label Text="· 在下方输入框输入文字消息" FontSize="13" TextColor="#222"/>
-                <Label Text="· 支持实时语音识别和AI回复" FontSize="13" TextColor="#222"/>
-            </VerticalStackLayout>
+    <Grid RowDefinitions="Auto,*,Auto" BackgroundColor="#F7F7F7">
+        <!-- 顶部状态栏 -->
+        <Frame Grid.Row="0" BackgroundColor="#2196F3" Padding="0" HasShadow="False" CornerRadius="0">
+            <Grid Padding="15,10" ColumnDefinitions="*,Auto">
+                <StackLayout Grid.Column="0" Orientation="Vertical" VerticalOptions="Center">
+                    <Label Text="小智AI助手" FontSize="18" FontAttributes="Bold" TextColor="White"/>
+                    <Label Text="连接状态：已连接" FontSize="12" TextColor="White" Opacity="0.8"/>
+                </StackLayout>
+                <StackLayout Grid.Column="1" Orientation="Horizontal" VerticalOptions="Center">
+                    <Label x:Name="StatusIcon" Text="🟢" FontSize="16" TextColor="White" VerticalOptions="Center"/>
+                    <Label x:Name="StatusText" Text="准备就绪" FontSize="12" TextColor="White" VerticalOptions="Center"/>
+                </StackLayout>
+            </Grid>
         </Frame>
+        
         <!-- 聊天消息区 -->
-        <ScrollView Grid.Row="2" BackgroundColor="#F7F7F7">
-            <VerticalStackLayout x:Name="ChatStack" Padding="10,10,10,0" Spacing="10">
-                <!-- 消息由后台动态添加 -->
+        <ScrollView Grid.Row="1" BackgroundColor="#F7F7F7" Padding="0">
+            <VerticalStackLayout x:Name="ChatStack" Padding="0,15,0,15" Spacing="6">
+                <!-- 欢迎消息 -->
+                <Frame BackgroundColor="#E8E8E8" CornerRadius="8" Padding="12,8" HasShadow="False" 
+                       HorizontalOptions="Center" Margin="40,0,40,10">
+                    <StackLayout Spacing="4">
+                        <Label Text="欢迎使用小智AI助手！" FontSize="14" FontAttributes="Bold" 
+                               TextColor="#333" HorizontalTextAlignment="Center"/>
+                        <Label Text="• 输入文字或点击🎤语音对话" FontSize="12" TextColor="#666" HorizontalTextAlignment="Center"/>
+                        <Label Text="• 支持实时语音识别和AI回复" FontSize="12" TextColor="#666" HorizontalTextAlignment="Center"/>
+                    </StackLayout>
+                </Frame>
+                <!-- 动态消息在这里添加 -->
             </VerticalStackLayout>
         </ScrollView>
+        
         <!-- 底部输入区 -->
-        <Grid Grid.Row="3" Padding="10,8" ColumnSpacing="8" BackgroundColor="#F7F7F7">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <Frame Grid.Column="0" Padding="0" CornerRadius="18" BackgroundColor="White" HasShadow="False" VerticalOptions="Center" HeightRequest="44">
-                <Entry x:Name="MessageEntry" Placeholder="输入文字消息..." HeightRequest="44" BackgroundColor="Transparent" TextColor="#222"/>
-            </Frame>
-            <Button Text="发送" Grid.Column="1" HeightRequest="44" CornerRadius="18" BackgroundColor="#2196F3" TextColor="White" Clicked="OnSendClicked" WidthRequest="60" Padding="10,0"/>
-            <Button Text="🎤 开始录音" Grid.Column="2" HeightRequest="44" CornerRadius="18" BackgroundColor="#1DBA4C" TextColor="White" Clicked="OnRecordClicked" WidthRequest="90" Padding="10,0" FontSize="16"/>
-            <Button Text="准备录音" Grid.Column="3" HeightRequest="44" CornerRadius="18" BackgroundColor="#E0E0E0" TextColor="#888" IsEnabled="False" WidthRequest="80" Padding="10,0" FontSize="16"/>
-        </Grid>
+        <Border Grid.Row="2" BackgroundColor="White" Stroke="#E0E0E0" StrokeThickness="1">
+            <Grid Padding="12,8" ColumnSpacing="8" RowDefinitions="Auto,Auto">
+                <!-- 主输入行 -->
+                <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto">
+                    <Border Grid.Column="0" Stroke="#E0E0E0" StrokeThickness="1" StrokeShape="RoundRectangle 20" 
+                            BackgroundColor="#F8F8F8" Padding="15,0" MinimumHeightRequest="40">
+                        <Entry x:Name="MessageEntry" 
+                               Placeholder="输入消息..." 
+                               BackgroundColor="Transparent" 
+                               TextColor="#333"
+                               PlaceholderColor="#999"
+                               FontSize="15"
+                               VerticalOptions="Center"/>
+                    </Border>
+                    <Button Grid.Column="1" 
+                            Text="发送" 
+                            BackgroundColor="#007AFF" 
+                            TextColor="White" 
+                            CornerRadius="20" 
+                            HeightRequest="40"
+                            WidthRequest="70"
+                            FontSize="14"
+                            Margin="8,0,0,0"
+                            Clicked="OnSendClicked"/>
+                    <Button Grid.Column="2" 
+                            Text="🎤" 
+                            BackgroundColor="#34C759" 
+                            TextColor="White" 
+                            CornerRadius="20" 
+                            HeightRequest="40"
+                            WidthRequest="40"
+                            FontSize="18"
+                            Margin="8,0,0,0"
+                            Clicked="OnRecordClicked"/>
+                </Grid>
+                
+                <!-- 录音提示行（可选显示） -->
+                <Label Grid.Row="1" 
+                       Text="🔴 按住录音，松开发送" 
+                       FontSize="12" 
+                       TextColor="#999" 
+                       HorizontalOptions="Center" 
+                       Margin="0,4,0,0"
+                       IsVisible="False"/>
+            </Grid>
+        </Border>
     </Grid>
 </ContentPage> 

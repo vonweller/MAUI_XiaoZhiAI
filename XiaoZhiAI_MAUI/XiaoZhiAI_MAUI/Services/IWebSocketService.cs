@@ -18,6 +18,11 @@ public interface IWebSocketService
     event EventHandler<string> MessageReceived;
 
     /// <summary>
+    /// Event triggered when a binary message is received.
+    /// </summary>
+    event EventHandler<byte[]> BinaryMessageReceived;
+
+    /// <summary>
     /// Connects to the WebSocket server.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -37,6 +42,22 @@ public interface IWebSocketService
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A task representing the asynchronous operation, with a boolean indicating success.</returns>
     Task<bool> SendTextAsync(string message, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends binary data to the server.
+    /// </summary>
+    /// <param name="data">The binary data to send.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation, with a boolean indicating success.</returns>
+    Task<bool> SendBinaryAsync(byte[] data, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Sends a detect message with the correct format for text input.
+    /// </summary>
+    /// <param name="text">The text content to send.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A task representing the asynchronous operation, with a boolean indicating success.</returns>
+    Task<bool> SendDetectMessageAsync(string text, CancellationToken cancellationToken);
 }
 
 /// <summary>
