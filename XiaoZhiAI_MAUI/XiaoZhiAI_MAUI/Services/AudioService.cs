@@ -38,6 +38,10 @@ namespace XiaoZhiAI_MAUI.Services
         private DateTime _lastTtsEndTime = DateTime.MinValue;
         private bool _isInCooldown = false;
 
+        // 监听状态管理（参考Unity逻辑）
+        private string _listenState = "stop"; // "start" | "stop"
+        public string ListenState => _listenState;
+
         // 音频缓冲区
         private readonly Queue<float> _recordBuffer = new();
         private readonly object _recordBufferLock = new();
@@ -60,6 +64,13 @@ namespace XiaoZhiAI_MAUI.Services
 
         public bool IsRecording => _isRecording;
         public bool IsPlaying => _isPlaying;
+
+        // 设置监听状态（参考Unity逻辑）
+        public void SetListenState(string state)
+        {
+            Debug.WriteLine($"🎧 监听状态变更: {_listenState} -> {state}");
+            _listenState = state;
+        }
 
         public async Task InitializeAsync()
         {
@@ -112,16 +123,23 @@ namespace XiaoZhiAI_MAUI.Services
 
         public async Task StartRecordingAsync()
         {
+            Debug.WriteLine($"🎤 StartRecordingAsync被调用 - 当前状态: 录音={_isRecording}, 播放={_isPlaying}, 冷却={_isInCooldown}");
+            
             if (!_isInitialized)
             {
+                Debug.WriteLine("初始化音频服务...");
                 await InitializeAsync();
             }
 
-            if (_isRecording) return;
+            if (_isRecording) 
+            {
+                Debug.WriteLine("⚠️ 已在录音中，忽略重复启动请求");
+                return;
+            }
 
             try
             {
-                Debug.WriteLine("开始录音...");
+                Debug.WriteLine("🎤 开始录音操作...");
                 
                 _recordingCancellation?.Cancel();
                 _recordingCancellation = new CancellationTokenSource();
@@ -129,59 +147,81 @@ namespace XiaoZhiAI_MAUI.Services
                 // 清空缓冲区
                 lock (_recordBufferLock)
                 {
+                    var bufferCount = _recordBuffer.Count;
                     _recordBuffer.Clear();
+                    Debug.WriteLine($"清空录音缓冲区，原有 {bufferCount} 个采样");
                 }
 
                 // 重置VAD状态
                 _currentSilenceFrames = 0;
                 _isSpeaking = false;
+                Debug.WriteLine("重置VAD状态");
 
                 // 启动录音
                 if (_platformAudio != null)
                 {
+                    Debug.WriteLine("调用平台音频服务开始录音...");
                     await _platformAudio.StartRecordingAsync();
+                    Debug.WriteLine("平台音频服务录音已启动");
+                }
+                else
+                {
+                    Debug.WriteLine("❌ 平台音频服务为null，无法启动录音");
+                    return;
                 }
 
                 _recordingTask = AudioProcessingLoop(_recordingCancellation.Token);
                 _isRecording = true;
 
                 RecordingStatusChanged?.Invoke(this, true);
-                Debug.WriteLine("录音已开始");
+                Debug.WriteLine("✅ 录音已成功开始");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"开始录音失败: {ex.Message}");
+                Debug.WriteLine($"❌ 开始录音失败: {ex.Message}");
+                Debug.WriteLine($"异常详情: {ex}");
                 throw;
             }
         }
 
         public async Task StopRecordingAsync()
         {
-            if (!_isRecording) return;
+            Debug.WriteLine($"🛑 StopRecordingAsync被调用 - 当前录音状态: {_isRecording}");
+            
+            if (!_isRecording) 
+            {
+                Debug.WriteLine("⚠️ 当前未在录音，忽略停止请求");
+                return;
+            }
 
             try
             {
-                Debug.WriteLine("停止录音...");
+                Debug.WriteLine("🛑 停止录音操作...");
 
                 _isRecording = false;
                 _recordingCancellation?.Cancel();
 
                 if (_platformAudio != null)
                 {
+                    Debug.WriteLine("调用平台音频服务停止录音...");
                     await _platformAudio.StopRecordingAsync();
+                    Debug.WriteLine("平台音频服务录音已停止");
                 }
 
                 if (_recordingTask != null)
                 {
+                    Debug.WriteLine("等待录音任务结束...");
                     await _recordingTask;
+                    Debug.WriteLine("录音任务已结束");
                 }
 
                 RecordingStatusChanged?.Invoke(this, false);
-                Debug.WriteLine("录音已停止");
+                Debug.WriteLine("✅ 录音已成功停止");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"停止录音失败: {ex.Message}");
+                Debug.WriteLine($"❌ 停止录音失败: {ex.Message}");
+                Debug.WriteLine($"异常详情: {ex}");
             }
         }
 
@@ -339,17 +379,33 @@ namespace XiaoZhiAI_MAUI.Services
 
         private void OnAudioDataReceived(object sender, float[] audioData)
         {
-            if (!_isRecording || audioData == null || audioData.Length == 0) return;
+            // 严格检查：只有在真正录音状态下才处理音频数据
+            if (!_isRecording || !_isInitialized)
+            {
+                Debug.WriteLine($"⚠️ 收到音频数据但状态不符 - 录音:{_isRecording}, 初始化:{_isInitialized}, 数据长度: {audioData?.Length ?? 0}");
+                return;
+            }
+            
+            if (audioData == null || audioData.Length == 0) 
+            {
+                Debug.WriteLine("⚠️ 收到空的音频数据，忽略");
+                return;
+            }
 
-            // 触发实时音频数据事件
+            Debug.WriteLine($"📥 正在录音，收到音频数据: {audioData.Length} 采样");
+
+            // 只触发AudioDataReceived事件给测试页面（聊天页面不需要原始音频数据）
+            // 注意：聊天页面只需要编码后的数据（通过AudioDataReady事件）
             AudioDataReceived?.Invoke(this, audioData);
 
             lock (_recordBufferLock)
             {
+                var originalCount = _recordBuffer.Count;
                 foreach (var sample in audioData)
                 {
                     _recordBuffer.Enqueue(sample);
                 }
+                Debug.WriteLine($"录音缓冲区: {originalCount} -> {_recordBuffer.Count} 采样");
             }
         }
 
@@ -432,15 +488,19 @@ namespace XiaoZhiAI_MAUI.Services
                         }
                     }
 
-                    // 编码并发送音频数据
-                    if (_recordCodec != null)
+                    // 关键修复：只有在监听状态为"start"时才编码并发送音频数据（参考Unity逻辑）
+                    if (_listenState == "start" && _recordCodec != null)
                     {
                         var encodedData = _recordCodec.Encode(frameBuffer);
                         if (encodedData != null)
                         {
-                            Debug.WriteLine($"发送音频数据: {encodedData.Length} 字节");
+                            Debug.WriteLine($"✅ 监听中，发送音频数据: {encodedData.Length} 字节");
                             AudioDataReady?.Invoke(this, encodedData);
                         }
+                    }
+                    else if (_listenState != "start")
+                    {
+                        Debug.WriteLine($"⚠️ 监听状态为 '{_listenState}'，跳过音频发送");
                     }
                     else
                     {

@@ -139,7 +139,7 @@ namespace XiaoZhiAI_MAUI.Platforms.iOS
                 unsafe
                 {
                     var channelDataPtr = buffer.FloatChannelData;
-                    var channelData = (float*)channelDataPtr.GetItemAtIndex(0);
+                    var channelData = (float*)((void**)channelDataPtr)[0];
                     for (int i = 0; i < audioData.Length; i++)
                     {
                         channelData[i] = audioData[i];
@@ -175,7 +175,7 @@ namespace XiaoZhiAI_MAUI.Platforms.iOS
                 unsafe
                 {
                     var channelDataPtr = buffer.FloatChannelData;
-                    var channelData = (float*)channelDataPtr.GetItemAtIndex(0);
+                    var channelData = (float*)((void**)channelDataPtr)[0];
                     for (int i = 0; i < frameLength; i++)
                     {
                         audioData[i] = channelData[i];

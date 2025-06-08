@@ -11,6 +11,7 @@ public partial class AudioTestPage : ContentPage
 {
     private readonly IAudioService _audioService;
     private readonly IPlatformAudioService _platformAudio;
+    private readonly ILogService _logService;
     private bool _isRecording = false;
     private readonly StringBuilder _logBuilder = new();
     private int _audioDataCount = 0;
@@ -23,6 +24,7 @@ public partial class AudioTestPage : ContentPage
         // 获取服务
         _audioService = IPlatformApplication.Current.Services.GetService<IAudioService>();
         _platformAudio = IPlatformApplication.Current.Services.GetService<IPlatformAudioService>();
+        _logService = IPlatformApplication.Current.Services.GetService<ILogService>();
         
         // 订阅音频事件
         if (_audioService != null)
@@ -32,6 +34,12 @@ public partial class AudioTestPage : ContentPage
             _audioService.PlaybackStatusChanged += OnPlaybackStatusChanged;
             _audioService.VoiceActivityDetected += OnVoiceActivityDetected;
             _audioService.AudioDataReceived += OnAudioDataReceived;
+        }
+        
+        // 订阅全局日志服务
+        if (_logService != null)
+        {
+            _logService.LogMessageReceived += OnGlobalLogMessageReceived;
         }
         
         LogMessage("音频测试页面已初始化");
@@ -312,6 +320,17 @@ public partial class AudioTestPage : ContentPage
         });
     }
 
+    private void OnGlobalLogMessageReceived(object sender, string logMessage)
+    {
+        // 接收来自其他页面的日志消息
+        _logBuilder.AppendLine($"[全局] {logMessage}");
+        
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            LogLabel.Text = _logBuilder.ToString();
+        });
+    }
+
     // UI更新方法
     private void UpdateServiceStatus(string status)
     {
@@ -371,6 +390,11 @@ public partial class AudioTestPage : ContentPage
             _audioService.PlaybackStatusChanged -= OnPlaybackStatusChanged;
             _audioService.VoiceActivityDetected -= OnVoiceActivityDetected;
             _audioService.AudioDataReceived -= OnAudioDataReceived;
+        }
+        
+        if (_logService != null)
+        {
+            _logService.LogMessageReceived -= OnGlobalLogMessageReceived;
         }
     }
 }

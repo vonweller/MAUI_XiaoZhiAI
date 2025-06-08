@@ -5,23 +5,26 @@ using XiaoZhiAI_MAUI.Services;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Maui.ApplicationModel;
+using System.Diagnostics;
 
 namespace XiaoZhiAI_MAUI.Pages
 {
     public partial class ChatPage : ContentPage
     {
-            private readonly IWebSocketService _webSocketService;
+                private readonly IWebSocketService _webSocketService;
     private readonly IBackgroundService _backgroundService;
     private readonly IAudioService _audioService;
-        private CancellationTokenSource _cts;
-        private const int MaxMessages = 200;
+    private readonly ILogService _logService;
+    private CancellationTokenSource _cts;
+    private const int MaxMessages = 200;
 
         public ChatPage()
         {
             InitializeComponent();
-            _webSocketService = IPlatformApplication.Current.Services.GetService<IWebSocketService>();
-            _backgroundService = IPlatformApplication.Current.Services.GetService<IBackgroundService>();
-            _audioService = IPlatformApplication.Current.Services.GetService<IAudioService>();
+                    _webSocketService = IPlatformApplication.Current.Services.GetService<IWebSocketService>();
+        _backgroundService = IPlatformApplication.Current.Services.GetService<IBackgroundService>();
+        _audioService = IPlatformApplication.Current.Services.GetService<IAudioService>();
+        _logService = IPlatformApplication.Current.Services.GetService<ILogService>();
             
             _webSocketService.StatusChanged += OnWebSocketStatusChanged;
             _webSocketService.MessageReceived += OnWebSocketMessageReceived;
@@ -58,20 +61,14 @@ namespace XiaoZhiAI_MAUI.Pages
                     _audioService.PlaybackStatusChanged += OnPlaybackStatusChanged;
                     _audioService.VoiceActivityDetected += OnVoiceActivityDetected;
                     
-                    AddMessageSafe(new ChatMessage
-                    {
-                        Type = ChatMessageType.System,
-                        Content = "音频服务已初始化"
-                    });
+                                    // 音频服务初始化消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogInfo("音频服务已初始化");
                 }
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"音频服务初始化失败: {ex.Message}"
-                });
+                // 异常消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"音频服务初始化失败: {ex.Message}");
             }
         }
 
@@ -80,50 +77,35 @@ namespace XiaoZhiAI_MAUI.Pages
             try
             {
                 await _backgroundService.StartAsync();
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "后台服务已启动，应用可在后台保持连接"
-                });
+                // 后台服务消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogInfo("后台服务已启动，应用可在后台保持连接");
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"启动后台服务失败: {ex.Message}"
-                });
+                // 异常消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"启动后台服务失败: {ex.Message}");
             }
         }
 
         private void OnBackgroundServiceStatusChanged(object sender, bool isRunning)
         {
             var status = isRunning ? "运行中" : "已停止";
-            AddMessageSafe(new ChatMessage
-            {
-                Type = ChatMessageType.System,
-                Content = $"后台服务状态: {status}"
-            });
+            // 后台服务状态消息不显示在聊天界面，只在测试日志中记录
+            _logService?.LogDebug($"后台服务状态: {status}");
         }
 
         private async void ConnectToServer()
         {
             try
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "正在连接服务器..."
-                });
+                // 连接消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogInfo("正在连接服务器...");
                 await _webSocketService.ConnectAsync(_cts.Token);
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"连接失败: {ex.Message}"
-                });
+                // 连接失败消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"连接失败: {ex.Message}");
             }
         }
 
@@ -153,19 +135,13 @@ namespace XiaoZhiAI_MAUI.Pages
                 };
                 UpdateStatusDisplay(icon, statusText);
                 
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = msg
-                });
+                // WebSocket状态消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogDebug($"WebSocket状态: {msg}");
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"状态回调异常: {ex.Message}"
-                });
+                // 状态回调异常不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"状态回调异常: {ex.Message}");
             }
         }
 
@@ -176,11 +152,8 @@ namespace XiaoZhiAI_MAUI.Pages
                 // 改进消息分类逻辑
                 if (IsSystemMessage(message))
                 {
-                    AddMessageSafe(new ChatMessage
-                    {
-                        Type = ChatMessageType.System,
-                        Content = message
-                    });
+                    // 系统消息不显示在聊天界面，只在测试日志中记录
+                    _logService?.LogDebug($"系统消息: {message}");
                 }
                 else if (IsJsonMessage(message))
                 {
@@ -194,7 +167,7 @@ namespace XiaoZhiAI_MAUI.Pages
                     AddMessageSafe(new ChatMessage
                     {
                         Type = ChatMessageType.AI,
-                        Avatar = "avatar_ai.png",
+                        Avatar = "🤖", // AI头像
                         Content = message,
                         Time = DateTime.Now
                     });
@@ -209,11 +182,8 @@ namespace XiaoZhiAI_MAUI.Pages
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"消息处理异常: {ex.Message}"
-                });
+                // 异常信息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"消息处理异常: {ex.Message}");
             }
         }
 
@@ -222,21 +192,14 @@ namespace XiaoZhiAI_MAUI.Pages
             try
             {
                 // 接收到服务器的音频数据，直接播放（已通过Opus解码）
+                _logService?.LogInfo($"接收到音频数据: {binaryData.Length} 字节，正在播放");
                 _audioService?.PlayAudio(binaryData);
                 
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"接收到音频数据: {binaryData.Length} 字节，正在播放"
-                });
+                // 不在UI中显示音频数据接收消息，只在Debug日志中记录
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"音频播放异常: {ex.Message}"
-                });
+                _logService?.LogError($"音频播放异常: {ex.Message}");
             }
         }
 
@@ -244,24 +207,28 @@ namespace XiaoZhiAI_MAUI.Pages
 
         private bool IsSystemMessage(string message)
         {
-            return message.StartsWith("OTA") || 
-                   message.StartsWith("Connection") || 
-                   message.StartsWith("Send failed") || 
-                   message.StartsWith("Handshake") || 
-                   message.StartsWith("Using WebSocketUrl") || 
-                   message.StartsWith("HELLO") || 
-                   message.StartsWith("SessionId") || 
-                   message.StartsWith("TCP Connection") || 
-                   message.StartsWith("Performing OTA check") || 
-                   message.StartsWith("Failed to parse") || 
+            // 识别系统消息，这些消息不应该在聊天界面显示
+            return message.StartsWith("Connection failed") || 
                    message.StartsWith("Server closed") || 
-                   message.StartsWith("Receive loop error") || 
-                   message.StartsWith("Connection failed") || 
-                   message.StartsWith("Inner Exception") || 
-                   message.StartsWith("OTA check") || 
+                   message.StartsWith("Receive loop error") ||
+                   message.StartsWith("Cannot send detect message") ||
+                   message.StartsWith("SessionId captured:") ||  // SessionId消息
+                   message.StartsWith("Server HELLO received") ||
+                   message.StartsWith("HELLO message:") ||
+                   message.StartsWith("Sending detect message:") ||
+                   message.StartsWith("OTA check") ||
+                   message.StartsWith("Using WebSocketUrl:") ||
+                   message.StartsWith("Connecting to") ||
+                   message.StartsWith("TCP Connection successful") ||
+                   message.StartsWith("Sending HELLO message") ||
                    message.StartsWith("Waiting for server HELLO") ||
-                   message.StartsWith("Sending detect message") ||
-                   message.StartsWith("Cannot send detect message");
+                   message.StartsWith("Handshake complete") ||
+                   message.StartsWith("Send failed") ||
+                   message.StartsWith("Send exception") ||
+                   message.StartsWith("Binary send failed") ||
+                   message.StartsWith("Binary send exception") ||
+                   message.StartsWith("Error handling binary message") ||
+                   message.StartsWith("Failed to parse websocket");
         }
 
         private bool IsJsonMessage(string message)
@@ -281,6 +248,27 @@ namespace XiaoZhiAI_MAUI.Pages
                     
                     switch (messageType)
                     {
+                        case "hello":
+                            // 收到hello响应，自动开始监听（参考Unity逻辑）
+                            if (jsonObj.TryGetProperty("session_id", out var sessionIdElement))
+                            {
+                                var sessionId = sessionIdElement.GetString();
+                                if (!string.IsNullOrEmpty(sessionId))
+                                {
+                                    _logService?.LogInfo($"收到session_id: {sessionId}，开始监听");
+                                    // 系统消息不显示在聊天界面，只在测试日志中记录
+                                    _logService?.LogInfo("AI助手已就绪，开始监听");
+                                    
+                                    // 自动开始监听（参考Unity的StartListening逻辑）
+                                    _ = Task.Run(async () => 
+                                    {
+                                        await Task.Delay(500); // 短暂延迟确保连接稳定
+                                        await StartListening(sessionId);
+                                    });
+                                }
+                            }
+                            break;
+                            
                         case "tts":
                             if (jsonObj.TryGetProperty("text", out var textElement))
                             {
@@ -291,34 +279,56 @@ namespace XiaoZhiAI_MAUI.Pages
                                     AddMessageSafe(new ChatMessage
                                     {
                                         Type = ChatMessageType.AI,
-                                        Avatar = "avatar_ai.png",
+                                        Avatar = "🤖", // AI头像
                                         Content = text,
                                         Time = DateTime.Now
                                     });
                                 }
                             }
-                            // 其他tts状态信息作为系统消息
+                            // 处理TTS状态（参考Unity逻辑）
                             if (jsonObj.TryGetProperty("state", out var stateElement))
                             {
                                 var state = stateElement.GetString();
                                 
-                                // 处理TTS状态
-                                if (state == "end")
+                                if (state == "start" || state == "sentence_start")
                                 {
-                                    // TTS结束，重置播放缓冲区
-                                    _audioService?.ResetPlayback();
-                                    UpdateStatusDisplay("🟢", "准备就绪");
-                                }
-                                else if (state == "start")
-                                {
+                                    // TTS开始播放，停止监听和录音避免回音（参考Unity逻辑）
+                                    _audioService?.SetListenState("stop"); // 停止监听状态
+                                    if (_audioService != null && _audioService.IsRecording)
+                                    {
+                                        _logService?.LogInfo("TTS开始，停止录音避免回音");
+                                        _ = Task.Run(async () => await _audioService.StopRecordingAsync());
+                                    }
                                     UpdateStatusDisplay("🔊", "AI说话中");
+                                    
+                                    // AI开始说话状态只在调试日志中显示，不在UI显示
+                                    _logService?.LogInfo("AI开始说话");
                                 }
-                                
-                                AddMessageSafe(new ChatMessage
+                                else if (state == "stop")
                                 {
-                                    Type = ChatMessageType.System,
-                                    Content = $"TTS状态: {state}"
-                                });
+                                    // TTS结束，重置播放缓冲区并重新开始监听（参考Unity逻辑）
+                                    _logService?.LogInfo("TTS结束，重新开始监听");
+                                    _audioService?.ResetPlayback();
+                                    
+                                    // 延迟重新开始监听，避免立即捕获到回音
+                                    _ = Task.Run(async () => 
+                                    {
+                                        await Task.Delay(1500); // 1.5秒冷却时间，与Unity一致
+                                        if (!string.IsNullOrEmpty(_webSocketService.SessionId))
+                                        {
+                                            await StartListening(_webSocketService.SessionId);
+                                        }
+                                    });
+                                    
+                                    UpdateStatusDisplay("🟢", "准备就绪");
+                                    // AI说话结束状态只在调试日志中显示，不在UI显示
+                                                                            _logService?.LogInfo("AI说话结束");
+                                }
+                                else
+                                {
+                                    // TTS其他状态消息不显示在聊天界面，只在测试日志中记录
+                                    _logService?.LogDebug($"TTS状态: {state}");
+                                }
                             }
                             break;
                             
@@ -332,8 +342,8 @@ namespace XiaoZhiAI_MAUI.Pages
                                     AddMessageSafe(new ChatMessage
                                     {
                                         Type = ChatMessageType.User,
-                                        Avatar = "avatar_user.png",
-                                        Content = $"[语音识别] {text}",
+                                        Avatar = "👤", // 用户头像
+                                        Content = text, // 移除"[语音识别]"前缀
                                         Time = DateTime.Now
                                     });
                                 }
@@ -341,33 +351,21 @@ namespace XiaoZhiAI_MAUI.Pages
                             break;
                             
                         default:
-                            // 其他JSON消息作为系统消息
-                            AddMessageSafe(new ChatMessage
-                            {
-                                Type = ChatMessageType.System,
-                                Content = $"[{messageType}] {message}"
-                            });
+                            // 其他JSON消息不显示在聊天界面，只在测试日志中记录
+                            _logService?.LogDebug($"收到消息: [{messageType}] {message}");
                             break;
                     }
                 }
                 else
                 {
-                    // 无类型的JSON消息
-                    AddMessageSafe(new ChatMessage
-                    {
-                        Type = ChatMessageType.System,
-                        Content = message
-                    });
+                    // 无类型的JSON消息不显示在聊天界面，只在测试日志中记录
+                    _logService?.LogDebug($"收到无类型消息: {message}");
                 }
             }
             catch
             {
-                // JSON解析失败，当作系统消息
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = message
-                });
+                // JSON解析失败，不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"JSON解析失败: {message}");
             }
         }
 
@@ -393,42 +391,24 @@ namespace XiaoZhiAI_MAUI.Pages
 
         private void AddMessage(ChatMessage msg)
         {
-            // 时间戳
-            if (msg.Type != ChatMessageType.System)
-            {
-                var timeLabel = new Label
-                {
-                    Text = (msg.Time == default ? DateTime.Now : msg.Time).ToString("HH:mm"),
-                    FontSize = 12,
-                    TextColor = Color.FromArgb("#888"),
-                    HorizontalOptions = LayoutOptions.Center,
-                    Margin = new Thickness(0, 8, 0, 0)
-                };
-                ChatStack.Children.Add(timeLabel);
-            }
-
+            // 不再显示System类型消息，直接跳过
             if (msg.Type == ChatMessageType.System)
             {
-                var sysFrame = new Frame
-                {
-                    BackgroundColor = Color.FromArgb("#E8E8E8"),
-                    CornerRadius = 8,
-                    Padding = new Thickness(12, 6),
-                    HasShadow = false,
-                    HorizontalOptions = LayoutOptions.Center,
-                    Margin = new Thickness(40, 4, 40, 4),
-                    Content = new Label 
-                    { 
-                        Text = msg.Content,
-                        FontSize = 12,
-                        TextColor = Color.FromArgb("#666"),
-                        HorizontalTextAlignment = TextAlignment.Center,
-                        LineBreakMode = LineBreakMode.WordWrap
-                    }
-                };
-                ChatStack.Children.Add(sysFrame);
+                return;
             }
-            else if (msg.Type == ChatMessageType.AI)
+
+            // 时间戳（只为AI和User消息显示）
+            var timeLabel = new Label
+            {
+                Text = (msg.Time == default ? DateTime.Now : msg.Time).ToString("HH:mm"),
+                FontSize = 12,
+                TextColor = Color.FromArgb("#888"),
+                HorizontalOptions = LayoutOptions.Center,
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+            ChatStack.Children.Add(timeLabel);
+
+            if (msg.Type == ChatMessageType.AI)
             {
                 var contentLabel = new Label 
                 { 
@@ -450,12 +430,15 @@ namespace XiaoZhiAI_MAUI.Pages
                     HorizontalOptions = LayoutOptions.Start
                 };
                 
-                var avatar = new Image
+                var avatar = new Label
                 {
-                    Source = msg.Avatar ?? "avatar_ai.png",
+                    Text = msg.Avatar ?? "🤖",
+                    FontSize = 24,
                     WidthRequest = 36,
                     HeightRequest = 36,
                     VerticalOptions = LayoutOptions.Start,
+                    HorizontalTextAlignment = TextAlignment.Center,
+                    VerticalTextAlignment = TextAlignment.Center,
                     Margin = new Thickness(0, 0, 8, 0)
                 };
                 
@@ -491,24 +474,37 @@ namespace XiaoZhiAI_MAUI.Pages
                     HorizontalOptions = LayoutOptions.End
                 };
                 
-                var avatar = new Image
+                var avatar = new Label
                 {
-                    Source = msg.Avatar ?? "avatar_user.png",
+                    Text = msg.Avatar ?? "👤",
+                    FontSize = 24,
                     WidthRequest = 36,
                     HeightRequest = 36,
                     VerticalOptions = LayoutOptions.Start,
+                    HorizontalTextAlignment = TextAlignment.Center,
+                    VerticalTextAlignment = TextAlignment.Center,
                     Margin = new Thickness(8, 0, 0, 0)
                 };
                 
-                var row = new HorizontalStackLayout
+                // 使用Grid来确保用户消息靠右显示
+                var grid = new Grid
                 {
-                    Spacing = 0,
                     Padding = new Thickness(60, 4, 10, 4),
-                    HorizontalOptions = LayoutOptions.Fill
+                    HorizontalOptions = LayoutOptions.FillAndExpand,
+                    ColumnDefinitions = 
+                    {
+                        new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, // 占位
+                        new ColumnDefinition { Width = GridLength.Auto }, // 气泡
+                        new ColumnDefinition { Width = GridLength.Auto }  // 头像
+                    }
                 };
-                row.Children.Add(bubble);
-                row.Children.Add(avatar);
-                ChatStack.Children.Add(row);
+
+                Grid.SetColumn(bubble, 1);
+                Grid.SetColumn(avatar, 2);
+                
+                grid.Children.Add(bubble);
+                grid.Children.Add(avatar);
+                ChatStack.Children.Add(grid);
             }
 
             // 自动滚动到底部
@@ -534,7 +530,7 @@ namespace XiaoZhiAI_MAUI.Pages
                     AddMessageSafe(new ChatMessage
                     {
                         Type = ChatMessageType.User,
-                        Avatar = "avatar_user.png",
+                        Avatar = "👤", // 用户头像
                         Content = text,
                         Time = DateTime.Now
                     });
@@ -546,14 +542,12 @@ namespace XiaoZhiAI_MAUI.Pages
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"发送消息异常: {ex.Message}"
-                });
+                // 发送异常消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"发送消息异常: {ex.Message}");
             }
         }
-        private async void OnRecordClicked(object sender, EventArgs e)
+        // 按住录音开始（参考Unity的OnSpaceKeyPress）
+        private async void OnRecordPressed(object sender, EventArgs e)
         {
             try
             {
@@ -565,22 +559,66 @@ namespace XiaoZhiAI_MAUI.Pages
 
                 if (_audioService.IsRecording)
                 {
-                    // 停止录音
-                    await _audioService.StopRecordingAsync();
+                    // 如果已在录音，忽略重复按下
+                    return;
                 }
-                else
+
+                // 开始录音
+                UpdateStatusDisplay("🎤", "用户说话中");
+                // 录音开始消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogInfo("开始录音，请说话...");
+
+                // 更新按钮外观
+                MainThread.BeginInvokeOnMainThread(() =>
                 {
-                    // 开始录音
-                    await _audioService.StartRecordingAsync();
-                }
+                    RecordButton.BackgroundColor = Colors.Red;
+                    RecordButton.Text = "🔴";
+                    RecordingHint.IsVisible = true;
+                });
+
+                await _audioService.StartRecordingAsync();
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
+                // 录音失败消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"开始录音失败: {ex.Message}");
+            }
+        }
+
+        // 松开录音结束并发送（参考Unity的OnSpaceKeyRelease）
+        private async void OnRecordReleased(object sender, EventArgs e)
+        {
+            try
+            {
+                if (_audioService == null || !_audioService.IsRecording)
                 {
-                    Type = ChatMessageType.System,
-                    Content = $"录音操作失败: {ex.Message}"
+                    // 如果没在录音，忽略松开事件
+                    return;
+                }
+
+                // 停止录音
+                UpdateStatusDisplay("📤", "发送中");
+                // 录音结束消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogInfo("录音结束，正在处理并发送到服务器...");
+
+                // 恢复按钮外观
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    RecordButton.BackgroundColor = Colors.Green;
+                    RecordButton.Text = "🎤";
+                    RecordingHint.IsVisible = false;
                 });
+
+                await _audioService.StopRecordingAsync();
+
+                // 等待一下让最后的音频数据发送完
+                await Task.Delay(500);
+                UpdateStatusDisplay("🟢", "准备就绪");
+            }
+            catch (Exception ex)
+            {
+                // 停止录音失败消息不显示在聊天界面，只在测试日志中记录
+                _logService?.LogError($"停止录音失败: {ex.Message}");
             }
         }
 
@@ -589,85 +627,127 @@ namespace XiaoZhiAI_MAUI.Pages
         {
             try
             {
+                _logService?.LogDebug($"OnAudioDataReady: 收到音频数据 {audioData?.Length ?? 0} 字节");
+                
+                if (audioData == null || audioData.Length == 0)
+                {
+                    _logService?.LogDebug("OnAudioDataReady: 音频数据为空，跳过发送");
+                    return;
+                }
+                
+                _logService?.LogDebug($"WebSocket状态: {_webSocketService.Status}");
+                
                 // 发送音频数据到服务器
                 if (_webSocketService.Status == WebSocketStatus.Connected)
                 {
-                    await _webSocketService.SendBinaryAsync(audioData, _cts.Token);
+                    _logService?.LogDebug($"正在发送音频数据到服务器: {audioData.Length} 字节");
+                    bool success = await _webSocketService.SendBinaryAsync(audioData, _cts.Token);
+                    
+                    if (success)
+                    {
+                        _logService?.LogDebug($"音频数据发送成功: {audioData.Length} 字节");
+                        // 减少UI噪音：不再显示每次音频数据发送的系统消息
+                    }
+                    else
+                    {
+                        _logService?.LogError($"音频数据发送失败: {audioData.Length} 字节");
+                        // 音频发送失败消息不显示在聊天界面，只在测试日志中记录
+                    }
+                }
+                else
+                {
+                    _logService?.LogError($"WebSocket未连接，无法发送音频数据。状态: {_webSocketService.Status}");
+                    // WebSocket连接状态消息不显示在聊天界面，只在测试日志中记录
                 }
             }
             catch (Exception ex)
             {
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = $"发送音频数据失败: {ex.Message}"
-                });
+                _logService?.LogError($"OnAudioDataReady异常: {ex.Message}");
+                // 音频数据发送异常消息不显示在聊天界面，只在测试日志中记录
             }
         }
 
         private void OnRecordingStatusChanged(object sender, bool isRecording)
         {
+            // 只更新状态显示，不添加重复的系统消息
             if (isRecording)
             {
                 UpdateStatusDisplay("🔴", "AI聆听中");
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "开始录音 - AI正在聆听..."
-                });
             }
             else
             {
                 UpdateStatusDisplay("🟢", "准备就绪");
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "停止录音"
-                });
             }
         }
 
         private void OnPlaybackStatusChanged(object sender, bool isPlaying)
         {
+            // 只更新状态显示，不添加重复的系统消息
             if (isPlaying)
             {
                 UpdateStatusDisplay("🔊", "AI说话中");
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "AI开始说话..."
-                });
             }
             else
             {
                 UpdateStatusDisplay("🟢", "准备就绪");
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "AI说话结束"
-                });
             }
         }
 
         private void OnVoiceActivityDetected(object sender, bool hasVoice)
         {
+            // 只更新状态显示，不添加重复的系统消息
             if (hasVoice)
             {
                 UpdateStatusDisplay("🎤", "用户说话中");
-                AddMessageSafe(new ChatMessage
-                {
-                    Type = ChatMessageType.System,
-                    Content = "检测到用户语音..."
-                });
             }
             else
             {
                 UpdateStatusDisplay("🔴", "AI聆听中");
-                AddMessageSafe(new ChatMessage
+            }
+        }
+
+        private async Task StartListening(string sessionId)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(sessionId))
                 {
-                    Type = ChatMessageType.System,
-                    Content = "用户语音结束，AI处理中..."
-                });
+                    _logService?.LogError("StartListening: sessionId为空");
+                    return;
+                }
+                
+                _logService?.LogInfo($"开始监听，sessionId: {sessionId}");
+                
+                // 发送listen start消息（参考Unity逻辑）
+                var listenMsg = new
+                {
+                    session_id = sessionId,
+                    type = "listen",
+                    state = "start",
+                    mode = "auto"  // 自动模式，与Unity一致
+                };
+                
+                string json = System.Text.Json.JsonSerializer.Serialize(listenMsg);
+                bool success = await _webSocketService.SendTextAsync(json, _cts.Token);
+                
+                if (success)
+                {
+                    _logService?.LogInfo("监听消息发送成功");
+                    // 关键修复：设置AudioService监听状态为start（参考Unity逻辑）
+                    _audioService?.SetListenState("start");
+                    UpdateStatusDisplay("🔴", "AI聆听中");
+                    // 监听状态变化只在测试日志中显示，不显示UI消息
+                }
+                else
+                {
+                    _logService?.LogError("监听消息发送失败");
+                    // 监听启动失败消息不显示在聊天界面，只在测试日志中记录
+                }
+            }
+            catch (Exception ex)
+            {
+                _logService?.LogError($"StartListening异常: {ex.Message}");
+                // 监听启动异常消息不显示在聊天界面，只在测试日志中记录
             }
         }
 
@@ -682,9 +762,15 @@ namespace XiaoZhiAI_MAUI.Pages
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"更新状态显示失败: {ex.Message}");
+                    _logService?.LogError($"更新状态显示失败: {ex.Message}");
                 }
             });
+        }
+
+        // 辅助方法：记录日志到测试页面
+        private void LogToTest(string message)
+        {
+            _logService?.LogMessage(message);
         }
     }
 

@@ -43,6 +43,11 @@ namespace XiaoZhiAI_MAUI.Services
         bool IsPlaying { get; }
 
         /// <summary>
+        /// 设置监听状态（参考Unity逻辑）
+        /// </summary>
+        void SetListenState(string state);
+
+        /// <summary>
         /// 音频数据就绪事件（编码后的Opus数据）
         /// </summary>
         event EventHandler<byte[]> AudioDataReady;

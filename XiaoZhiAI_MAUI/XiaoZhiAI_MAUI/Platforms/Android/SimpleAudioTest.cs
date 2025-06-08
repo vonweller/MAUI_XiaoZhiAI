@@ -51,7 +51,7 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
                     .SetTransferMode(AudioTrackMode.Stream)
                     .Build();
 
-                if (_audioTrack.State == AudioTrackState.Initialized)
+                if ((int)_audioTrack.State == 1)
                 {
                     Debug.WriteLine("SimpleAudioTest: AudioTrack初始化成功");
                     return true;
@@ -74,7 +74,7 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
         {
             try
             {
-                if (_audioTrack == null || _audioTrack.State != AudioTrackState.Initialized)
+                if (_audioTrack == null || (int)_audioTrack.State != 1)
                 {
                     Debug.WriteLine("SimpleAudioTest: AudioTrack未初始化");
                     return false;

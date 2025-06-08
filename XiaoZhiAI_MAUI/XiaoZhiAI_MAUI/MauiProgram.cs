@@ -24,6 +24,7 @@ namespace XiaoZhiAI_MAUI
             builder.Services.AddSingleton<IWebSocketService, WebSocketService>();
             builder.Services.AddSingleton<IBackgroundService, Services.BackgroundService>();
             builder.Services.AddSingleton<IAudioService, AudioService>();
+            builder.Services.AddSingleton<ILogService, LogService>();
             builder.Services.AddSingleton<Pages.SettingsPage>();
             builder.Services.AddSingleton<Pages.ChatPage>();
             builder.Services.AddSingleton<Pages.AudioTestPage>();

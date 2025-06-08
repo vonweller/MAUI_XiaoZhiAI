@@ -150,7 +150,7 @@ namespace XiaoZhiAI_MAUI.Platforms.Windows
                 _playbackCts = new CancellationTokenSource();
                 _playbackTask = PlaybackLoop(_playbackCts.Token);
                 
-                Debug.WriteLine("Windows音频服务初始化完成（WaveOut API）");
+                Debug.WriteLine("Windows音频服务初始化完成（WaveOut API）- 注意：录音设备未打开，需要手动调用StartRecordingAsync");
             }
             catch (Exception ex)
             {
@@ -198,6 +198,21 @@ namespace XiaoZhiAI_MAUI.Platforms.Windows
                 {
                     _isRecording = false;
                     _recordingCts?.Cancel();
+                }
+
+                // 立即停止录音设备
+                if (_waveIn != IntPtr.Zero)
+                {
+                    try
+                    {
+                        Debug.WriteLine("立即停止录音设备");
+                        waveInStop(_waveIn);
+                        waveInReset(_waveIn);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"停止录音设备失败: {ex.Message}");
+                    }
                 }
 
                 if (_recordingTask != null)
@@ -469,6 +484,15 @@ namespace XiaoZhiAI_MAUI.Platforms.Windows
         {
             try
             {
+                Debug.WriteLine($"🎤 ProcessRecordedData被调用 - 录音状态: {_isRecording}, 字节数: {header.dwBytesRecorded}");
+                
+                // 严格检查：只有在录音状态且设备存在时才处理数据
+                if (!_isRecording || _waveIn == IntPtr.Zero)
+                {
+                    Debug.WriteLine($"⚠️ 收到录音数据但状态不符 - 录音状态:{_isRecording}, 设备句柄:{_waveIn != IntPtr.Zero}, 忽略数据");
+                    return;
+                }
+                
                 if (header.dwBytesRecorded > 0)
                 {
                     // 将录音的字节数据转换为float数组
@@ -485,15 +509,20 @@ namespace XiaoZhiAI_MAUI.Platforms.Windows
                         audioData[i] = sample / 32768.0f;
                     }
                     
-                    Debug.WriteLine($"录音回调: 处理了 {audioData.Length} 采样");
+                    Debug.WriteLine($"📤 Windows录音回调: 处理了 {audioData.Length} 采样，准备发送给AudioService");
                     
                     // 触发音频数据事件
                     AudioDataReceived?.Invoke(this, audioData);
                 }
+                else
+                {
+                    Debug.WriteLine("⚠️ 录音回调收到0字节数据");
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"处理录音数据失败: {ex.Message}");
+                Debug.WriteLine($"❌ 处理录音数据失败: {ex.Message}");
+                Debug.WriteLine($"异常详情: {ex}");
             }
         }
 

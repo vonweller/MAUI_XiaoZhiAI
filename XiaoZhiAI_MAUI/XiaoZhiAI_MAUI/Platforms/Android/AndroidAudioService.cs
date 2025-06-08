@@ -6,15 +6,14 @@ using AndroidX.Core.Content;
 using Microsoft.Maui.Controls;
 using System.Diagnostics;
 using XiaoZhiAI_MAUI.Services;
+using AudioSource = Android.Media.AudioSource;
 
 namespace XiaoZhiAI_MAUI.Platforms.Android
 {
     public class AndroidAudioService : IPlatformAudioService
     {
-        private SimpleAudioRecorder? _simpleRecorder;
         private AudioTrack? _audioTrack;
         private bool _isPlaying = false;
-        private string? _lastRecordingPath;
         
         public event EventHandler<float[]> AudioDataReceived;
 
@@ -22,7 +21,7 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
         {
             try
             {
-                Debug.WriteLine("=== 初始化新版Android音频服务 (使用MediaRecorder) ===");
+                Debug.WriteLine("=== 初始化Android音频服务 ===");
                 
                 // 检查权限
                 await CheckPermissions();
@@ -35,13 +34,10 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
                     return;
                 }
                 
-                // 初始化SimpleAudioRecorder
-                _simpleRecorder = new SimpleAudioRecorder(context);
+                // 只初始化播放组件，录音组件在需要时创建
+                await InitializeAudioTrack();
                 
-                Debug.WriteLine("✅ Android音频服务初始化完成");
-                
-                // 开始录制→播放测试
-                await StartRecordPlaybackTest();
+                Debug.WriteLine("✅ Android音频服务初始化完成 - 等待用户手动触发录音");
             }
             catch (Exception ex)
             {
@@ -71,179 +67,164 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
             }
         }
 
-        // 核心功能：录制→播放测试 (使用MediaRecorder)
-        public async Task StartRecordPlaybackTest()
-        {
-            try
-            {
-                Debug.WriteLine("=== 开始MediaRecorder录制→播放测试 ===");
-                Debug.WriteLine("🎤 即将开始3秒录音，请对着麦克风说话...");
-                
-                await Task.Delay(1000); // 等待1秒准备
-                
-                // 开始录音
-                await StartRecording();
-                
-                // 录音3秒
-                await Task.Delay(3000);
-                
-                // 停止录音
-                await StopRecording();
-                
-                // 等待1秒
-                await Task.Delay(1000);
-                
-                Debug.WriteLine("🔊 录音完成，即将播放刚才录制的声音...");
-                
-                // 播放录制的声音
-                await PlayRecordedAudio();
-                
-                Debug.WriteLine("✅ === MediaRecorder录制→播放测试完成 ===");
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"❌ 录制播放测试失败: {ex.Message}");
-            }
-        }
+        // 实现真正的录音功能（不自动播放录音内容）
+        private bool _isRecording = false;
+        private CancellationTokenSource? _recordingCancellation;
 
-        private async Task StartRecording()
-        {
-            try
-            {
-                if (_simpleRecorder == null)
-                {
-                    Debug.WriteLine("❌ SimpleAudioRecorder未初始化");
-                    return;
-                }
-
-                Debug.WriteLine("🎤 开始MediaRecorder录音...");
-                var success = await _simpleRecorder.StartRecordingAsync();
-                
-                if (success)
-                {
-                    Debug.WriteLine("✅ MediaRecorder录音开始成功");
-                    
-                    // 模拟AudioDataReceived事件（保持兼容性）
-                    _ = Task.Run(async () =>
-                    {
-                        while (_simpleRecorder?.IsRecording == true)
-                        {
-                            // 发送模拟数据保持兼容性
-                            var fakeData = new float[1024];
-                            for (int i = 0; i < fakeData.Length; i++)
-                            {
-                                fakeData[i] = (float)(Random.Shared.NextDouble() * 0.1); // 小幅度随机数据
-                            }
-                            AudioDataReceived?.Invoke(this, fakeData);
-                            await Task.Delay(50);
-                        }
-                    });
-                }
-                else
-                {
-                    Debug.WriteLine("❌ MediaRecorder录音开始失败");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"❌ 开始录音异常: {ex.Message}");
-            }
-        }
-
-        private async Task StopRecording()
-        {
-            try
-            {
-                if (_simpleRecorder == null)
-                {
-                    Debug.WriteLine("❌ SimpleAudioRecorder未初始化");
-                    return;
-                }
-
-                Debug.WriteLine("⏹️ 停止MediaRecorder录音...");
-                _lastRecordingPath = await _simpleRecorder.StopRecordingAsync();
-                
-                if (!string.IsNullOrEmpty(_lastRecordingPath))
-                {
-                    var fileInfo = new System.IO.FileInfo(_lastRecordingPath);
-                    Debug.WriteLine($"✅ 录音完成: {_lastRecordingPath}");
-                    Debug.WriteLine($"📁 文件大小: {fileInfo.Length} bytes");
-                }
-                else
-                {
-                    Debug.WriteLine("❌ 录音失败，没有生成文件");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"❌ 停止录音异常: {ex.Message}");
-            }
-        }
-
-        private async Task PlayRecordedAudio()
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(_lastRecordingPath))
-                {
-                    Debug.WriteLine("❌ 没有录音文件可播放");
-                    return;
-                }
-
-                if (_simpleRecorder == null)
-                {
-                    Debug.WriteLine("❌ SimpleAudioRecorder未初始化");
-                    return;
-                }
-
-                Debug.WriteLine($"🔊 开始播放录音: {_lastRecordingPath}");
-                var success = await _simpleRecorder.PlayRecordingAsync(_lastRecordingPath);
-                
-                if (success)
-                {
-                    Debug.WriteLine("✅ 录音播放完成");
-                }
-                else
-                {
-                    Debug.WriteLine("❌ 录音播放失败");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"❌ 播放录音异常: {ex.Message}");
-            }
-        }
-
-        // IPlatformAudioService接口实现
+        // IPlatformAudioService接口实现 - 实时音频流（参考Unity）
         public async Task StartRecordingAsync()
         {
+            if (_isRecording)
+            {
+                Debug.WriteLine("⚠️ 已在录音中，忽略重复启动");
+                return;
+            }
+
             try
             {
-                await StartRecording();
+                Debug.WriteLine("🎤 Android开始实时录音...");
+                
+                _recordingCancellation?.Cancel();
+                _recordingCancellation = new CancellationTokenSource();
+                _isRecording = true;
+
+                // 启动实时音频捕获任务（类似Unity的SendAudioCoroutine）
+                _ = Task.Run(() => RealTimeAudioCapture(_recordingCancellation.Token));
+                
+                Debug.WriteLine("✅ Android实时录音已启动");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"❌ StartRecordingAsync失败: {ex.Message}");
+                Debug.WriteLine($"❌ Android录音启动失败: {ex.Message}");
+                _isRecording = false;
             }
         }
 
         public async Task StopRecordingAsync()
         {
+            if (!_isRecording)
+            {
+                Debug.WriteLine("⚠️ 当前未在录音，忽略停止请求");
+                return;
+            }
+
             try
             {
-                await StopRecording();
+                Debug.WriteLine("🛑 Android停止实时录音...");
                 
-                // 自动播放录制的音频
-                if (!string.IsNullOrEmpty(_lastRecordingPath))
-                {
-                    Debug.WriteLine("🔊 录音停止后自动播放录制的音频...");
-                    await Task.Delay(500); // 等待500ms确保录音完全停止
-                    await PlayRecordedAudio();
-                }
+                _isRecording = false;
+                _recordingCancellation?.Cancel();
+                
+                Debug.WriteLine("✅ Android实时录音已停止 - 不播放录音内容");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"❌ StopRecordingAsync失败: {ex.Message}");
+                Debug.WriteLine($"❌ Android停止录音失败: {ex.Message}");
+            }
+        }
+
+        // 实时音频捕获（参考Unity的SendAudioCoroutine）
+        private async Task RealTimeAudioCapture(CancellationToken cancellationToken)
+        {
+            AudioRecord? audioRecord = null;
+            try
+            {
+                Debug.WriteLine("🎤 开始初始化AudioRecord进行实时录音...");
+
+                // 音频参数（与AudioService保持一致）
+                const int SAMPLE_RATE = 16000; // 16kHz录音采样率
+                var CHANNEL_CONFIG = ChannelIn.Mono;
+                var AUDIO_FORMAT = Encoding.Pcm16bit;
+                
+                // 计算缓冲区大小（60ms帧 = 960采样）
+                int frameSize = 960; // 60ms at 16kHz
+                int bufferSize = AudioRecord.GetMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT);
+                bufferSize = Math.Max(bufferSize, frameSize * 4); // 确保至少能容纳几帧
+
+                Debug.WriteLine($"🎤 AudioRecord参数: 采样率={SAMPLE_RATE}, 缓冲区={bufferSize}");
+
+                // 创建AudioRecord
+                audioRecord = new AudioRecord(
+                    AudioSource.Mic,
+                    SAMPLE_RATE,
+                    CHANNEL_CONFIG,
+                    AUDIO_FORMAT,
+                    bufferSize);
+
+                if ((int)audioRecord.State != 1)
+                {
+                    Debug.WriteLine($"❌ AudioRecord初始化失败，状态: {audioRecord.State}");
+                    return;
+                }
+
+                Debug.WriteLine("✅ AudioRecord初始化成功，开始录音");
+                audioRecord.StartRecording();
+
+                // 音频数据缓冲区
+                var buffer = new short[frameSize]; // 960采样的缓冲区
+                var floatBuffer = new float[frameSize];
+
+                while (!cancellationToken.IsCancellationRequested && _isRecording)
+                {
+                    try
+                    {
+                        // 读取音频数据
+                        int readSamples = audioRecord.Read(buffer, 0, buffer.Length);
+                        
+                        if (readSamples > 0)
+                        {
+                            // 转换为float数组（-1.0到1.0）
+                            for (int i = 0; i < readSamples; i++)
+                            {
+                                floatBuffer[i] = buffer[i] / 32768.0f;
+                            }
+
+                            // 如果读取的样本数不够一帧，则补零
+                            if (readSamples < frameSize)
+                            {
+                                for (int i = readSamples; i < frameSize; i++)
+                                {
+                                    floatBuffer[i] = 0.0f;
+                                }
+                            }
+
+                            // 触发音频数据事件（发送给AudioService处理）
+                            AudioDataReceived?.Invoke(this, floatBuffer);
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"⚠️ AudioRecord读取失败，返回值: {readSamples}");
+                        }
+
+                        // 短暂延迟避免过度消耗CPU
+                        await Task.Delay(10, cancellationToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"❌ 音频捕获循环异常: {ex.Message}");
+                        break;
+                    }
+                }
+
+                Debug.WriteLine("🛑 实时音频捕获结束");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"❌ 实时音频捕获失败: {ex.Message}");
+            }
+            finally
+            {
+                try
+                {
+                    audioRecord?.Stop();
+                    audioRecord?.Release();
+                    audioRecord?.Dispose();
+                    Debug.WriteLine("✅ AudioRecord资源已释放");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"⚠️ AudioRecord释放失败: {ex.Message}");
+                }
             }
         }
 
@@ -265,7 +246,7 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
                     await InitializeAudioTrack();
                 }
 
-                if (_audioTrack == null || _audioTrack.State != AudioTrackState.Initialized)
+                if (_audioTrack == null || (int)_audioTrack.State != 1)
                 {
                     Debug.WriteLine("❌ AudioTrack未正确初始化");
                     return;
@@ -322,7 +303,7 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
                     bufferSize * 2,
                     AudioTrackMode.Stream);
 
-                if (_audioTrack.State == AudioTrackState.Initialized)
+                if ((int)_audioTrack.State == 1)
                 {
                     Debug.WriteLine("✅ AudioTrack初始化成功");
                 }
@@ -343,9 +324,12 @@ namespace XiaoZhiAI_MAUI.Platforms.Android
             {
                 Debug.WriteLine("🗑️ 释放AndroidAudioService资源");
                 
-                _simpleRecorder?.Dispose();
-                _simpleRecorder = null;
+                // 停止录音
+                _isRecording = false;
+                _recordingCancellation?.Cancel();
+                _recordingCancellation?.Dispose();
                 
+                // 释放播放资源
                 if (_audioTrack != null)
                 {
                     if (_audioTrack.PlayState == PlayState.Playing)

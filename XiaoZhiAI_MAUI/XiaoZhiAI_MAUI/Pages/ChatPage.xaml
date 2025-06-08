@@ -61,6 +61,7 @@
                             Margin="8,0,0,0"
                             Clicked="OnSendClicked"/>
                     <Button Grid.Column="2" 
+                            x:Name="RecordButton"
                             Text="🎤" 
                             BackgroundColor="#34C759" 
                             TextColor="White" 
@@ -69,14 +70,16 @@
                             WidthRequest="40"
                             FontSize="18"
                             Margin="8,0,0,0"
-                            Clicked="OnRecordClicked"/>
+                            Pressed="OnRecordPressed"
+                            Released="OnRecordReleased"/>
                 </Grid>
                 
                 <!-- 录音提示行（可选显示） -->
                 <Label Grid.Row="1" 
+                       x:Name="RecordingHint"
                        Text="🔴 按住录音，松开发送" 
                        FontSize="12" 
-                       TextColor="#999" 
+                       TextColor="#FF3B30" 
                        HorizontalOptions="Center" 
                        Margin="0,4,0,0"
                        IsVisible="False"/>

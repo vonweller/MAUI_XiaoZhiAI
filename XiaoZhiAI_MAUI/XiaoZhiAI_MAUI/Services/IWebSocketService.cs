@@ -8,6 +8,11 @@ public interface IWebSocketService
     WebSocketStatus Status { get; }
 
     /// <summary>
+    /// Gets the session ID received from the server.
+    /// </summary>
+    string SessionId { get; }
+
+    /// <summary>
     /// Event triggered when the connection status changes.
     /// </summary>
     event EventHandler<WebSocketStatus> StatusChanged;
