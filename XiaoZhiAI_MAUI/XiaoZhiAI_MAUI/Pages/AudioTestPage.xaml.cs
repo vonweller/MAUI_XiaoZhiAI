@@ -40,9 +40,15 @@ public partial class AudioTestPage : ContentPage
         if (_logService != null)
         {
             _logService.LogMessageReceived += OnGlobalLogMessageReceived;
+            LogMessage("✅ 全局日志服务已订阅");
+        }
+        else
+        {
+            LogMessage("❌ 全局日志服务未找到");
         }
         
         LogMessage("音频测试页面已初始化");
+        
         CheckServiceStatus();
         RefreshDeviceInfo();
     }
@@ -323,11 +329,30 @@ public partial class AudioTestPage : ContentPage
     private void OnGlobalLogMessageReceived(object sender, string logMessage)
     {
         // 接收来自其他页面的日志消息
-        _logBuilder.AppendLine($"[全局] {logMessage}");
+        var globalEntry = $"[全局] {logMessage}";
+        _logBuilder.AppendLine(globalEntry);
+        
+        // 同时输出到调试日志
+        Debug.WriteLine($"[AudioTestPage] 收到全局日志: {globalEntry}");
         
         MainThread.BeginInvokeOnMainThread(() =>
         {
-            LogLabel.Text = _logBuilder.ToString();
+            try
+            {
+                if (LogLabel != null)
+                {
+                    LogLabel.Text = _logBuilder.ToString();
+                    Debug.WriteLine($"[AudioTestPage] UI已更新，日志总长度: {_logBuilder.Length}");
+                }
+                else
+                {
+                    Debug.WriteLine("❌ [AudioTestPage] LogLabel为null");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"❌ [AudioTestPage] UI更新失败: {ex.Message}");
+            }
         });
     }
 

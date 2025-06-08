@@ -17,6 +17,7 @@ namespace XiaoZhiAI_MAUI.Pages
     private readonly ILogService _logService;
     private CancellationTokenSource _cts;
     private const int MaxMessages = 200;
+    private readonly HashSet<string> _processedMessages = new(); // 防止重复消息
 
         public ChatPage()
         {
@@ -25,6 +26,12 @@ namespace XiaoZhiAI_MAUI.Pages
         _backgroundService = IPlatformApplication.Current.Services.GetService<IBackgroundService>();
         _audioService = IPlatformApplication.Current.Services.GetService<IAudioService>();
         _logService = IPlatformApplication.Current.Services.GetService<ILogService>();
+        
+        // 初始化LogService
+        if (_logService != null)
+        {
+            _logService.LogInfo("ChatPage已初始化");
+        }
             
             _webSocketService.StatusChanged += OnWebSocketStatusChanged;
             _webSocketService.MessageReceived += OnWebSocketMessageReceived;
@@ -162,22 +169,9 @@ namespace XiaoZhiAI_MAUI.Pages
                 }
                 else
                 {
-                    // 普通文本消息，当作AI回复
-                    UpdateStatusDisplay("💬", "AI回复中");
-                    AddMessageSafe(new ChatMessage
-                    {
-                        Type = ChatMessageType.AI,
-                        Avatar = "🤖", // AI头像
-                        Content = message,
-                        Time = DateTime.Now
-                    });
-                    
-                    // 延迟恢复准备状态
-                    _ = Task.Run(async () =>
-                    {
-                        await Task.Delay(2000);
-                        UpdateStatusDisplay("🟢", "准备就绪");
-                    });
+                    // 非JSON的普通文本消息，记录到测试日志中，不显示为聊天气泡
+                    // 因为AI的回复应该通过tts类型的JSON消息来处理
+                    _logService?.LogDebug($"收到非JSON文本消息: {message}");
                 }
             }
             catch (Exception ex)
@@ -275,14 +269,26 @@ namespace XiaoZhiAI_MAUI.Pages
                                 var text = textElement.GetString();
                                 if (!string.IsNullOrEmpty(text))
                                 {
-                                    UpdateStatusDisplay("💬", "AI回复中");
-                                    AddMessageSafe(new ChatMessage
+                                    // 使用消息内容作为唯一标识，防止重复显示
+                                    var messageKey = $"ai_text_{text.GetHashCode()}";
+                                    if (!_processedMessages.Contains(messageKey))
                                     {
-                                        Type = ChatMessageType.AI,
-                                        Avatar = "🤖", // AI头像
-                                        Content = text,
-                                        Time = DateTime.Now
-                                    });
+                                        _processedMessages.Add(messageKey);
+                                        UpdateStatusDisplay("💬", "AI回复中");
+                                        AddMessageSafe(new ChatMessage
+                                        {
+                                            Type = ChatMessageType.AI,
+                                            Avatar = "🤖", // AI头像
+                                            Content = text,
+                                            Time = DateTime.Now
+                                        });
+                                        
+                                        // 清理旧的处理记录，避免内存泄漏
+                                        if (_processedMessages.Count > 100)
+                                        {
+                                            _processedMessages.Clear();
+                                        }
+                                    }
                                 }
                             }
                             // 处理TTS状态（参考Unity逻辑）
@@ -338,6 +344,15 @@ namespace XiaoZhiAI_MAUI.Pages
                                 var text = sttTextElement.GetString();
                                 if (!string.IsNullOrEmpty(text))
                                 {
+                                    // 为用户消息生成防重复key（类型+内容）
+                                    var userMessageKey = $"user:{text}";
+                                    if (_processedMessages.Contains(userMessageKey))
+                                    {
+                                        _logService?.LogDebug($"跳过重复的用户消息: {text}");
+                                        break;
+                                    }
+                                    _processedMessages.Add(userMessageKey);
+                                    
                                     UpdateStatusDisplay("📝", "AI处理中");
                                     AddMessageSafe(new ChatMessage
                                     {
@@ -446,7 +461,8 @@ namespace XiaoZhiAI_MAUI.Pages
                 {
                     Spacing = 0,
                     Padding = new Thickness(10, 4, 60, 4),
-                    HorizontalOptions = LayoutOptions.Fill
+                    HorizontalOptions = LayoutOptions.Fill,
+                    BackgroundColor = Colors.Transparent // 设置透明背景
                 };
                 row.Children.Add(avatar);
                 row.Children.Add(bubble);
@@ -491,6 +507,7 @@ namespace XiaoZhiAI_MAUI.Pages
                 {
                     Padding = new Thickness(60, 4, 10, 4),
                     HorizontalOptions = LayoutOptions.FillAndExpand,
+                    BackgroundColor = Colors.Transparent, // 设置透明背景
                     ColumnDefinitions = 
                     {
                         new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, // 占位
@@ -527,6 +544,16 @@ namespace XiaoZhiAI_MAUI.Pages
                 var text = MessageEntry.Text?.Trim();
                 if (!string.IsNullOrEmpty(text))
                 {
+                    // 为用户消息生成防重复key（类型+内容）
+                    var userMessageKey = $"user:{text}";
+                    if (_processedMessages.Contains(userMessageKey))
+                    {
+                        _logService?.LogDebug($"跳过重复的用户消息: {text}");
+                        MessageEntry.Text = string.Empty;
+                        return;
+                    }
+                    _processedMessages.Add(userMessageKey);
+                    
                     AddMessageSafe(new ChatMessage
                     {
                         Type = ChatMessageType.User,
